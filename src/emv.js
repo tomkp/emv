@@ -130,3 +130,31 @@ var tlvToString = function(data) {
     return str;
 };
 
+
+
+function stringToByteArray(str) {
+    var arr = [];
+    for (var i = 0, l = str.length; i < l; i++) {
+        var hex = str.charCodeAt(i);
+        arr.push(hex);
+    }
+    return arr;
+}
+
+
+
+
+
+function emv(cardReader) {
+
+    var selectPse = function() {
+        var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
+        return iso7816(cardReader).selectFile(PSE);
+    };
+
+    return {
+        selectPse: selectPse
+    };
+}
+
+module.exports = emv;

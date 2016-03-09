@@ -1,5 +1,5 @@
 var cardreader = require('card-reader');
-var iso7816 = require('iso7816');
+var emv = require('../lib/emv');
 
 cardreader.on('device-activated', function (reader) {
     //console.info('Device activated', reader);
@@ -23,14 +23,6 @@ cardreader.on('card-inserted', function (reader, status) {
     explore();
 });
 
-function stringToByteArray(str) {
-    var arr = [];
-    for (var i = 0, l = str.length; i < l; i++) {
-        var hex = str.charCodeAt(i);
-        arr.push(hex);
-    }
-    return arr;
-}
 
 
 var aids = [
@@ -56,23 +48,16 @@ var aids = [
 
 function explore() {
 
-    //var PAY_SYS_DDF01 = stringToByteArray('1PAY.SYS.DDF01');
-    var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
 
-    var application = iso7816(cardreader);
-    application
-        .selectFile(PSE)
+    var application = emv(cardreader);
+    application.selectPse()
         .then(function (response) {
             console.info('selectFile: data-received', response.toString('hex'));
-            //return Promise.all(aids.map(function(aid) {
-            //    console.info('', aid.name);
-            //    return application.selectFile(aid.aid);
-            //}));
-            return application.selectFile(aids[8].aid)
+            return application.selectApplication(aids[8].aid)
         })
         .then(function (response) {
             console.info('selectFile: data-received', response.toString('hex'));
         }).catch(function (error) {
-        console.error('selectFile: error', error);
-    });
+            console.error('selectFile: error', error);
+        });
 }
