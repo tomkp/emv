@@ -1,6 +1,8 @@
+'use strict';
+
 var tlv = require('tlv');
 var iso7816 = require('iso7816');
-var cardReader = require('card-reader');
+var hexify = require('hexify');
 
 var emvTags = {
     '4F': 'APP_IDENTIFIER',
@@ -110,50 +112,59 @@ var emvTags = {
     'BF0C': 'FCI_ISSUER_DD'
 };
 
-
-
-var parse = function(data) {
+var parse = function parse(data) {
+    console.info('parse', data.toString(), data.toString('hex'));
     var parsedTlv = tlv.parse(data);
     return tlvToString(parsedTlv);
 };
 
-var tlvToString = function(data) {
-    //console.info('tag', data.tag.toString(16), 'value', data.value);
+var tlvToString = function tlvToString(data) {
+    console.info('tag', data.tag.toString(16), 'value', data.value);
     var value = data.value;
-    var str = '[' + emvTags[data.tag.toString(16).toUpperCase()] + ']' + (value instanceof Array?'\n':value);
+
+
+    var decoded = '\n';
+    if (Buffer.isBuffer(value)) {
+        console.info('>', data.tag.toString(16) +' Buffer:', value);
+        decoded = value.toString();
+    } else if (value instanceof Array) {
+        console.info('>', data.tag.toString(16) + ' Array:', value);
+//        decoded = '\n';
+    }
+
+    var str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') '
+        //+ (value instanceof Array ? '\n' : value);
+        + decoded;
+
     if (data.value && Array.isArray(data.value)) {
         data.value.forEach(function (child) {
-            str +=  '\t' + tlvToString(child);
-        })
+            str += '\t' + tlvToString(child);
+        });
     }
-    str  += '\n';
+    str += '\n';
     return str;
 };
 
 
-
-function stringToByteArray(str) {
-    var arr = [];
-    for (var i = 0, l = str.length; i < l; i++) {
-        var hex = str.charCodeAt(i);
-        arr.push(hex);
-    }
-    return arr;
-}
-
-
-
-
-
 function emv(cardReader) {
 
-    var selectPse = function() {
+    var selectPse = function selectPse() {
         var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
         return iso7816(cardReader).selectFile(PSE);
     };
 
+    var selectApplication = function selectApplication(aidBytes) {
+        return iso7816(cardReader).selectFile(aidBytes);
+    };
+
+    var parseResponse = function(response) {
+        return parse(response.buffer());
+    };
+
     return {
-        selectPse: selectPse
+        selectPse: selectPse,
+        selectApplication: selectApplication,
+        parseResponse: parseResponse
     };
 }
 
