@@ -53,12 +53,12 @@ function explore() {
     application.selectPse()
         .then(function (response) {
             console.info('selectFile: data-received', response.toString('hex'));
-            console.info('parsed:\n', application.parseResponse(response));
+            console.info('parsed:\n', response.toTlvString());
             return application.selectApplication(aids[8].aid)
         })
         .then(function (response) {
             console.info('selectFile: data-received', response.toString('hex'));
-            console.info('parsed:\n', application.parseResponse(response));
+            console.info('parsed:\n', response.toTlvString());
         }).catch(function (error) {
             console.error('selectFile: error', error);
         });

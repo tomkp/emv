@@ -112,59 +112,65 @@ var emvTags = {
     'BF0C': 'FCI_ISSUER_DD'
 };
 
-var parse = function parse(data) {
-    console.info('parse', data.toString(), data.toString('hex'));
-    var parsedTlv = tlv.parse(data);
-    return tlvToString(parsedTlv);
-};
-
-var tlvToString = function tlvToString(data) {
-    console.info('tag', data.tag.toString(16), 'value', data.value);
-    var value = data.value;
 
 
-    var decoded = '\n';
-    if (Buffer.isBuffer(value)) {
-        console.info('>', data.tag.toString(16) +' Buffer:', value);
-        decoded = value.toString();
-    } else if (value instanceof Array) {
-        console.info('>', data.tag.toString(16) + ' Array:', value);
-//        decoded = '\n';
+function emvResponse(response) {
+
+    //console.info('parse', data.toString(), data.toString('hex'));
+    var parsed = tlv.parse(response.buffer());
+    //return tlvToString(parsedTlv);
+
+    var toTlvString = function() {
+        return format(parsed);
+    };
+
+    var format = function(data) {
+        console.info('tag', data.tag.toString(16), 'value', data.value);
+        var value = data.value;
+
+        var decoded = '\n';
+        if (Buffer.isBuffer(value)) {
+            //console.info('>', data.tag.toString(16) + ' Buffer:', value);
+            decoded = value.toString() + ' ' + value.toString('hex');
+        } else if (value instanceof Array) {
+            //console.info('>', data.tag.toString(16) + ' Array:', value);
+            //        decoded = '\n';
+        }
+
+        var str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') '
+                //+ (value instanceof Array ? '\n' : value);
+            + decoded;
+
+        if (data.value && Array.isArray(data.value)) {
+            data.value.forEach(function (child) {
+                str += '\t' + format(child);
+            });
+        }
+        str += '\n';
+        return str;
+    };
+
+
+    return {
+        tlv: parsed,
+        toTlvString: toTlvString
     }
-
-    var str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') '
-        //+ (value instanceof Array ? '\n' : value);
-        + decoded;
-
-    if (data.value && Array.isArray(data.value)) {
-        data.value.forEach(function (child) {
-            str += '\t' + tlvToString(child);
-        });
-    }
-    str += '\n';
-    return str;
-};
-
+}
 
 function emv(cardReader) {
 
     var selectPse = function selectPse() {
         var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
-        return iso7816(cardReader).selectFile(PSE);
+        return iso7816(cardReader).selectFile(PSE).then(function(resp) { return emvResponse(resp)});
     };
 
     var selectApplication = function selectApplication(aidBytes) {
-        return iso7816(cardReader).selectFile(aidBytes);
-    };
-
-    var parseResponse = function(response) {
-        return parse(response.buffer());
+        return iso7816(cardReader).selectFile(aidBytes).then(function(resp) { return emvResponse(resp)});
     };
 
     return {
         selectPse: selectPse,
-        selectApplication: selectApplication,
-        parseResponse: parseResponse
+        selectApplication: selectApplication
     };
 }
 
