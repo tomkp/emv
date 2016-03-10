@@ -31,7 +31,7 @@
   "dependencies": {
     "card-reader": "^0.0.18",
     "hexify": "^1.0.1",
-    "iso7816": "^1.0.3",
+    "iso7816": "^1.0.5",
     "tlv": "^1.1.1"
   },
   "devDependencies": {

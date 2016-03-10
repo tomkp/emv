@@ -113,18 +113,17 @@ var emvTags = {
 };
 
 
-
 function emvResponse(response) {
 
     //console.info('parse', data.toString(), data.toString('hex'));
     var parsed = tlv.parse(response.buffer());
     //return tlvToString(parsedTlv);
 
-    var toTlvString = function() {
+    var toTlvString = function () {
         return format(parsed);
     };
 
-    var format = function(data) {
+    var format = function (data) {
         console.info('tag', data.tag.toString(16), 'value', data.value);
         var value = data.value;
 
@@ -151,9 +150,30 @@ function emvResponse(response) {
     };
 
 
+    var find = function (tag) {
+        //console.info(`find tag: '${tag}'`);
+        return findTag(parsed, tag)
+    };
+
+    var findTag = function (data, tag) {
+        //console.info(`findTag tag: '${data.tag}', data.value: '${data.value}', match: ${data.tag === tag}`);
+        if (data.tag === tag) {
+            //console.info(`found '${data.value}'`);
+            return data.value;
+        } else if (data.value && Array.isArray(data.value)) {
+            //console.info(`search children '${data.value}'`);
+            for (var i =0; i < data.value.length; i++) {
+                var result = findTag(data.value[i], tag);
+                if (result) return result;
+            }
+        }
+    };
+
     return {
+        response: response,
         tlv: parsed,
-        toTlvString: toTlvString
+        toTlvString: toTlvString,
+        find: find
     }
 }
 
@@ -161,16 +181,27 @@ function emv(cardReader) {
 
     var selectPse = function selectPse() {
         var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
-        return iso7816(cardReader).selectFile(PSE).then(function(resp) { return emvResponse(resp)});
+        return iso7816(cardReader).selectFile(PSE).then(function (resp) {
+            return emvResponse(resp)
+        });
     };
 
     var selectApplication = function selectApplication(aidBytes) {
-        return iso7816(cardReader).selectFile(aidBytes).then(function(resp) { return emvResponse(resp)});
+        return iso7816(cardReader).selectFile(aidBytes).then(function (resp) {
+            return emvResponse(resp)
+        });
+    };
+
+    var readRecord = function readRecord(sfi, record) {
+        return iso7816(cardReader).readRecord(sfi, record).then(function (resp) {
+            return emvResponse(resp)
+        });
     };
 
     return {
         selectPse: selectPse,
-        selectApplication: selectApplication
+        selectApplication: selectApplication,
+        readRecord: readRecord
     };
 }
 

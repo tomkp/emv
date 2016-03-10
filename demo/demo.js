@@ -1,5 +1,6 @@
 var cardreader = require('card-reader');
 var emv = require('../lib/emv');
+var hexify = require('hexify');
 
 cardreader.on('device-activated', function (reader) {
     //console.info('Device activated', reader);
@@ -10,9 +11,6 @@ cardreader.on('device-deactivated', function (reader) {
 cardreader.on('card-removed', function (reader) {
     //console.info('Card removed', reader);
 });
-cardreader.on('data-received', function (data) {
-    //console.info('Data received', data.toString());
-});
 cardreader.on('error', function (error) {
     //console.info('Error', error);
 });
@@ -22,7 +20,6 @@ cardreader.on('card-inserted', function (reader, status) {
     //console.info('Card inserted', reader, status, this);
     explore();
 });
-
 
 
 var aids = [
@@ -54,12 +51,44 @@ function explore() {
         .then(function (response) {
             console.info('selectFile: data-received', response.toString('hex'));
             console.info('parsed:\n', response.toTlvString());
-            return application.selectApplication(aids[8].aid)
+
+            //console.info('sfi:', response.tlv.getFirstChild(0x6f));
+
+            var sfi = 1;
+            var record = 1;
+            return application.readRecord(sfi, record);
+
+
+            /*var promises = [];
+             for (var sfi = 1; sfi < 2; sfi++) {
+             for (var record = 1; record < 2; record++) {
+             promises.push(application.readRecord(sfi, record));
+             }
+             }
+             return Promise.all(promises)*/
         })
         .then(function (response) {
-            console.info('selectFile: data-received', response.toString('hex'));
+            //console.info('response', response);
+            //console.info('readRecord: data-received', response.buffer().toString('hex'));
             console.info('parsed:\n', response.toTlvString());
-        }).catch(function (error) {
-            console.error('selectFile: error', error);
-        });
+
+            var aid = response.find(0x4f);
+            console.info('aid', aid);
+
+
+            if (aid) {
+
+                return application.selectApplication(hexify.toByteArray(aid.toString('hex')));
+                // 00a404000ea000000004101000
+                // 00a4040007a000000004101000
+                //return application.selectApplication(aids[8].aid);
+            }
+
+        }).then(function (response) {
+            //console.info('response', response);
+            console.info('parsed:\n', response.toTlvString());
+
+    }).catch(function (error) {
+        console.error('Error:', error, error.stack);
+    });
 }
