@@ -4,13 +4,6 @@ var hexify = require('hexify');
 
 
 cardreader.on('card-inserted', function (reader, status) {
-    explore();
-});
-
-
-
-function explore() {
-
 
     var application = emv(cardreader);
     application.selectPse()
@@ -29,9 +22,10 @@ function explore() {
             }
 
         }).then(function (response) {
-            console.info(`Select Application:\n${response.toTlvString()}`);
+        console.info(`Select Application:\n${response.toTlvString()}`);
 
     }).catch(function (error) {
         console.error('Error:', error, error.stack);
     });
-}
+
+});
