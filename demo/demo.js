@@ -23,7 +23,7 @@ function explore() {
         .then(function (response) {
             console.info('Read Record:\n', response.toTlvString());
             var aid = response.find(0x4f);
-            console.info('Applciation ID', aid);
+            console.info('Application ID', aid);
             if (aid) {
                 return application.selectApplication(hexify.toByteArray(aid.toString('hex')));
             }
