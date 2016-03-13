@@ -124,7 +124,7 @@ function emvResponse(response) {
     };
 
     var format = function (data) {
-        console.info('tag', data.tag.toString(16), 'value', data.value);
+        //console.info('tag', data.tag.toString(16), 'value', data.value);
         var value = data.value;
 
         var decoded = '\n';
