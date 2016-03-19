@@ -115,8 +115,8 @@ var emvTags = {
 
 function emvResponse(response) {
 
-    //console.info('parse', data.toString(), data.toString('hex'));
-    var parsed = tlv.parse(response.buffer());
+    console.info('parse', response);
+    var parsed = tlv.parse(response.buffer);
     //return tlvToString(parsedTlv);
 
     var toTlvString = function () {
