@@ -1,6 +1,6 @@
 var cardreader = require('card-reader');
 var hexify = require('hexify');
-var emvResponse = require('../lib/EmvResponse');
+var emvTags = require('../lib/emvTags');
 var emvApplication = require('../lib/emvApplication');
 
 
@@ -33,15 +33,16 @@ cardreader.on('card-inserted', function (reader, status) {
     var application = emvApplication(cardreader);
     application.selectPse()
         .then(function (response) {
-            console.info(`Select PSE Response:\n${response.toTlvString()}`);
+            console.info(`Select PSE Response:\n${emvTags.format(response)}`);
             var sfi = 1;
-            var record = 1;
+            var record = 0;
 
-            while (record < 10) {
-                application.readRecord(sfi, record++).then(function (response) {
-                    if (response.response.isOk()) {
-                        console.info(`Read Record Response:\n${response.toTlvString()}`);
-                        var aid = response.find(0x4f);
+            while (record++ < 10) {
+                application.readRecord(sfi, record).then(function (response) {
+                    //console.info(`Read Record Response: ${sfi}, ${record}, ${response}`);
+                    if (response.isOk()) {
+                        console.info(`Read Record Response: ${emvTags.format(response)}`);
+                        var aid = emvTags.findTag(response, 0x4f);
                         if (aid) {
                             console.info(`Application ID: '${aid.toString('hex')}`);
                         }

@@ -112,7 +112,7 @@ let emvTags = {
 };
 
 
-function format(data) {
+function toString(data) {
     let value = data.value;
     let decoded = '\n';
     if (Buffer.isBuffer(value)) {
@@ -121,7 +121,7 @@ function format(data) {
     let str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') ' + decoded;
     if (data.value && Array.isArray(data.value)) {
         data.value.forEach(function (child) {
-            str += '\t' + format(child);
+            str += '\t' + toString(child);
         });
     }
     str += '\n';
@@ -129,33 +129,27 @@ function format(data) {
 }
 
 
-function findTag (data, tag) {
+function find(data, tag) {
     if (data.tag === tag) {
         return data.value;
     } else if (data.value && Array.isArray(data.value)) {
         for (let i = 0; i < data.value.length; i++) {
-            let result = findTag(data.value[i], tag);
+            let result = find(data.value[i], tag);
             if (result) return result;
         }
     }
 }
 
-function EmvResponse(response) {
-    this.response = response;
-    this.parsed = tlv.parse(response.buffer);
+function format(response) {
+    return toString(tlv.parse(response.buffer));
 }
 
-EmvResponse.prototype.toTlvString = function () {
-    return format(this.parsed);
-};
-
-EmvResponse.prototype.find = function (tag) {
-    return findTag(this.parsed, tag)
-};
-
-
-function create(response) {
-    return new EmvResponse(response);
+function findTag(response, tag) {
+    return find(tlv.parse(response.buffer), tag)
 }
 
-module.exports = create;
+
+module.exports = {
+    format: format,
+    findTag: findTag
+};
