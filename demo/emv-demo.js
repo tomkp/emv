@@ -1,6 +1,7 @@
 var cardreader = require('card-reader');
-var emv = require('../lib/emv');
 var hexify = require('hexify');
+var emvResponse = require('../lib/EmvResponse');
+var emvApplication = require('../lib/emvApplication');
 
 
 
@@ -29,7 +30,7 @@ cardreader.on('card-inserted', function (reader, status) {
 
     console.info(`Card inserted into '${reader.name}', atr: '${status.atr.toString('hex')}'`);
 
-    var application = emv(cardreader);
+    var application = emvApplication(cardreader);
     application.selectPse()
         .then(function (response) {
             console.info(`Select PSE Response:\n${response.toTlvString()}`);
