@@ -1,9 +1,9 @@
 'use strict';
 
-var tlv = require('tlv');
-var hexify = require('hexify');
+let tlv = require('tlv');
+let hexify = require('hexify');
 
-var emvTags = {
+let emvTags = {
     '4F': 'APP_IDENTIFIER',
     '50': 'APP_LABEL',
     '57': 'TRACK_2',
@@ -112,59 +112,45 @@ var emvTags = {
 };
 
 
+function format(data) {
+    let value = data.value;
+    let decoded = '\n';
+    if (Buffer.isBuffer(value)) {
+        decoded = value.toString() + ' ' + value.toString('hex');
+    }
+    let str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') ' + decoded;
+    if (data.value && Array.isArray(data.value)) {
+        data.value.forEach(function (child) {
+            str += '\t' + format(child);
+        });
+    }
+    str += '\n';
+    return str;
+}
+
+
+function findTag (data, tag) {
+    if (data.tag === tag) {
+        return data.value;
+    } else if (data.value && Array.isArray(data.value)) {
+        for (let i = 0; i < data.value.length; i++) {
+            let result = findTag(data.value[i], tag);
+            if (result) return result;
+        }
+    }
+}
+
 function EmvResponse(response) {
     this.response = response;
     this.parsed = tlv.parse(response.buffer);
 }
 
-EmvResponse.prototype.format = function (data) {
-    var self = this;
-    //console.log('tag', data.tag.toString(16), 'value', data.value);
-    var value = data.value;
-
-    var decoded = '\n';
-    if (Buffer.isBuffer(value)) {
-        //console.log('>', data.tag.toString(16) + ' Buffer:', value);
-        decoded = value.toString() + ' ' + value.toString('hex');
-    } else if (value instanceof Array) {
-        //console.log('>', data.tag.toString(16) + ' Array:', value);
-        //        decoded = '\n';
-    }
-
-    var str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') '
-        //+ (value instanceof Array ? '\n' : value);
-        + decoded;
-
-    if (data.value && Array.isArray(data.value)) {
-        data.value.forEach(function (child) {
-            str += '\t' + self.format(child);
-        });
-    }
-    str += '\n';
-    return str;
-};
-
 EmvResponse.prototype.toTlvString = function () {
-    return this.format(this.parsed);
+    return format(this.parsed);
 };
 
 EmvResponse.prototype.find = function (tag) {
-    //console.log(`find tag: '${tag}'`);
-    return this.findTag(this.parsed, tag)
-};
-
-EmvResponse.prototype.findTag = function (data, tag) {
-    //console.log(`findTag tag: '${data.tag}', data.value: '${data.value}', match: ${data.tag === tag}`);
-    if (data.tag === tag) {
-        //console.log(`found '${data.value}'`);
-        return data.value;
-    } else if (data.value && Array.isArray(data.value)) {
-        //console.log(`search children '${data.value}'`);
-        for (var i = 0; i < data.value.length; i++) {
-            var result = this.findTag(data.value[i], tag);
-            if (result) return result;
-        }
-    }
+    return findTag(this.parsed, tag)
 };
 
 
