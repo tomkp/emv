@@ -113,7 +113,6 @@ var emvTags = {
 
 
 function EmvResponse(response) {
-    console.log(`EmvResponse ${response.buffer}`);
     this.response = response;
     this.parsed = tlv.parse(response.buffer);
 }
