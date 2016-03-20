@@ -10,7 +10,7 @@ cardreader.on('device-activated', function (reader) {
 });
 
 cardreader.on('device-deactivated', function (reader) {
-    console.info(`Device '${reader.name}' deactivated`);
+    console.info(`Device '${reader}' deactivated`);
 });
 
 cardreader.on('card-removed', function (reader) {
