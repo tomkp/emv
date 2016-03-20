@@ -137,7 +137,7 @@ function emvResponse(response) {
         }
 
         var str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') '
-                //+ (value instanceof Array ? '\n' : value);
+            //+ (value instanceof Array ? '\n' : value);
             + decoded;
 
         if (data.value && Array.isArray(data.value)) {
@@ -162,7 +162,7 @@ function emvResponse(response) {
             return data.value;
         } else if (data.value && Array.isArray(data.value)) {
             //console.info(`search children '${data.value}'`);
-            for (var i =0; i < data.value.length; i++) {
+            for (var i = 0; i < data.value.length; i++) {
                 var result = findTag(data.value[i], tag);
                 if (result) return result;
             }
@@ -177,32 +177,33 @@ function emvResponse(response) {
     }
 }
 
-function emv(cardReader) {
 
-    var selectPse = function selectPse() {
-        var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
-        return iso7816(cardReader).selectFile(PSE).then(function (resp) {
-            return emvResponse(resp)
-        });
-    };
-
-    var selectApplication = function selectApplication(aidBytes) {
-        return iso7816(cardReader).selectFile(aidBytes).then(function (resp) {
-            return emvResponse(resp)
-        });
-    };
-
-    var readRecord = function readRecord(sfi, record) {
-        return iso7816(cardReader).readRecord(sfi, record).then(function (resp) {
-            return emvResponse(resp)
-        });
-    };
-
-    return {
-        selectPse: selectPse,
-        selectApplication: selectApplication,
-        readRecord: readRecord
-    };
+function EmvApplication(cardReader) {
+    this.cardReader = cardReader;
 }
 
-module.exports = emv;
+EmvApplication.prototype.selectPse = function () {
+    var PSE = [0x31, 0x50, 0x41, 0x59, 0x2E, 0x53, 0x59, 0x53, 0x2E, 0x44, 0x44, 0x46, 0x30, 0x31];
+    return iso7816(this.cardReader).selectFile(PSE).then(function (resp) {
+        return emvResponse(resp)
+    });
+};
+
+EmvApplication.prototype.selectApplication = function (aidBytes) {
+    return iso7816(this.cardReader).selectFile(aidBytes).then(function (resp) {
+        return emvResponse(resp)
+    });
+};
+
+EmvApplication.prototype.readRecord = function (sfi, record) {
+    return iso7816(this.cardReader).readRecord(sfi, record).then(function (resp) {
+        return emvResponse(resp)
+    });
+};
+
+function create(cardReader) {
+    return new EmvApplication(cardReader);
+}
+
+module.exports = create;
+
