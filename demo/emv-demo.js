@@ -39,7 +39,6 @@ cardreader.on('card-inserted', function (reader, status) {
 
             while (record++ < 10) {
                 application.readRecord(sfi, record).then(function (response) {
-                    //console.info(`Read Record Response: ${sfi}, ${record}, ${response}`);
                     if (response.isOk()) {
                         console.info(`Read Record Response: ${emvTags.format(response)}`);
                         var aid = emvTags.findTag(response, 0x4f);
