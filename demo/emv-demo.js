@@ -1,6 +1,8 @@
-var cardreader = require('card-reader');
-var emvTags = require('../lib/emvTags');
-var emvApplication = require('../lib/emvApplication');
+'use strict';
+
+let cardreader = require('card-reader');
+let emvTags = require('../lib/emvTags');
+let emvApplication = require('../lib/emvApplication');
 
 
 cardreader.on('device-activated', function (reader) {
@@ -28,30 +30,37 @@ cardreader.on('card-inserted', function (reader, status) {
 
     console.info(`Card inserted into '${reader.name}', atr: '${status.atr.toString('hex')}'`);
 
-    var application = emvApplication(cardreader);
-    application.selectPse()
+    let application = emvApplication(cardreader);
+    application
+        .selectPse()
         .then(function (response) {
             console.info(`Select PSE Response:\n${emvTags.format(response)}`);
-            var sfi = 1;
-            var record = 0;
-
-            while (record++ < 10) {
-                application.readRecord(sfi, record).then(function (response) {
-                    if (response.isOk()) {
-                        console.info(`Read Record Response: ${emvTags.format(response)}`);
-                        var aid = emvTags.findTag(response, 0x4f);
-                        if (aid) {
-                            console.info(`Application ID: '${aid.toString('hex')}`);
+            let sfi = emvTags.findTag(response, 0x88).toString('hex');
+            let records = [0, 1, 2, 3, 4, 5, 6];
+            let aids = [];
+            let queue = Promise.resolve();
+            records.forEach(function (record) {
+                queue = queue.then(function () {
+                    return application.readRecord(sfi, record).then(function (response) {
+                        if (response.isOk()) {
+                            console.info(`Read Record Response: \n${emvTags.format(response)}`);
+                            let aid = emvTags.findTag(response, 0x4f);
+                            if (aid) {
+                                console.info(`Application ID: '${aid.toString('hex')}`);
+                                aids.push(aid.toString('hex'));
+                            }
                         }
-                    }
-                    return response;
-                }).catch(function (error) {
-                    console.error('Read Record Error:', error, error.stack);
+                        return aids;
+                    }).catch(function (error) {
+                        console.error('Read Record Error:', error, error.stack);
+                    });
                 });
-            }
-
+            });
+            return queue;
+        }).then(function(applicationIds) {
+            console.info(`Application IDs: '${applicationIds}'`);
         }).catch(function (error) {
-        console.error('Error:', error, error.stack);
-    });
+            console.error('Error:', error, error.stack);
+        });
 
 });
