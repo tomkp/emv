@@ -1,8 +1,6 @@
 var cardreader = require('card-reader');
-var hexify = require('hexify');
 var emvTags = require('../lib/emvTags');
 var emvApplication = require('../lib/emvApplication');
-
 
 
 cardreader.on('device-activated', function (reader) {
