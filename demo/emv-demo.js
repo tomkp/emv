@@ -1,8 +1,8 @@
 'use strict';
 
 let cardreader = require('card-reader');
-let emvTags = require('../lib/emvTags');
-let emvApplication = require('../lib/emvApplication');
+let emvTags = require('../lib/emv-tags');
+let emvApplication = require('../lib/emv-application');
 
 
 cardreader.on('device-activated', function (reader) {
