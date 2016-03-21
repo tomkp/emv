@@ -1,6 +1,7 @@
 {
   "name": "emv",
   "version": "1.0.1",
+  "main": "lib/emv-application.js",
   "description": "",
   "scripts": {
     "compile": "babel -d lib/ src/",
@@ -20,7 +21,6 @@
     "es6"
   ],
   "license": "MIT",
-  "main": "lib/emv.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/tomkp/emv.git"

@@ -1,7 +1,6 @@
 'use strict';
 
-let tlv = require('tlv');
-let hexify = require('hexify');
+import tlv from 'tlv';
 
 let emvTags = {
     '4F': 'APP_IDENTIFIER',
