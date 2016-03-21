@@ -38,12 +38,12 @@ cardreader.on('card-inserted', function (reader, status) {
     console.info(`Card inserted into '${reader.name}', atr: '${status.atr.toString('hex')}'`);
 
     var application = emvApplication(cardreader);
-    application.selectPse()
+    application
+        .selectPse()
         .then(function (response) {
             console.info(`Select PSE Response:\n${emvTags.format(response)}`);
             var sfi = 1;
             var record = 0;
-
             while (record++ < 10) {
                 application.readRecord(sfi, record).then(function (response) {
                     if (response.isOk()) {
@@ -60,9 +60,8 @@ cardreader.on('card-inserted', function (reader, status) {
             }
 
         }).catch(function (error) {
-        console.error('Error:', error, error.stack);
-    });
-
+            console.error('Error:', error, error.stack);
+        });
 });
 
 
