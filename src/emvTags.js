@@ -113,7 +113,7 @@ let emvTags = {
 
 
 function toString(data) {
-    let value = data.value;
+    const value = data.value;
     let decoded = '\n';
     if (Buffer.isBuffer(value)) {
         decoded = value.toString() + ' ' + value.toString('hex');

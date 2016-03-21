@@ -1,7 +1,6 @@
 'use strict';
 
-var iso7816 = require('iso7816');
-var hexify = require('hexify');
+import iso7816 from 'iso7816';
 
 function EmvApplication(cardReader) {
     this.cardReader = cardReader;
