@@ -24,11 +24,11 @@ cardreader.on('card-removed', function (reader) {
     console.info(`Card removed from '${reader.name}' `);
 });
 
-cardreader.on('issue-command', function (reader, command) {
+cardreader.on('command-issued', function (reader, command) {
     console.info(`Command '${command.toString('hex')}' issued to '${reader.name}' `);
 });
 
-cardreader.on('receive-response', function (reader, response) {
+cardreader.on('response-received', function (reader, response) {
     console.info(`Response '${response}' received from '${reader.name}' `);
 });
 
