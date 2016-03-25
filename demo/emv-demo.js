@@ -1,36 +1,43 @@
 'use strict';
 
-let cardreader = require('card-reader');
+let devices = require('card-reader');
 let emvTags = require('../lib/emv-tags');
 let emvApplication = require('../lib/emv-application');
 
 
-cardreader.on('device-activated', function (reader) {
-    console.info(`Device '${reader.name}' activated`);
+devices.on('device-activated', function (event) {
+    console.log(`Device '${event.reader.name}' activated, devices: ${devices.listDevices()}`);
 });
 
-cardreader.on('device-deactivated', function (reader) {
-    console.info(`Device '${reader}' deactivated`);
+devices.on('device-deactivated', function (event) {
+    console.log(`Device '${event.reader.name}' deactivated, devices: ${devices.listDevices()}`);
 });
 
-cardreader.on('card-removed', function (reader) {
-    console.info(`Card removed from '${reader.name}' `);
+devices.on('card-removed', function (event) {
+    console.log(`Card removed from '${event.reader.name}' `);
 });
 
-cardreader.on('command-issued', function (reader, command) {
-    console.info(`Command '${command.toString('hex')}' issued to '${reader.name}' `);
+devices.on('command-issued', function (event) {
+    console.log(`Command '${event.command}' issued to '${event.reader.name}' `);
 });
 
-cardreader.on('response-received', function (reader, response) {
-    console.info(`Response '${response}' received from '${reader.name}' `);
+devices.on('response-received', function (event) {
+    console.log(`Response '${event.response}' received from '${event.reader.name}' in response to '${event.command}'`);
 });
 
+devices.on('error', function (event) {
+    console.log(`Error '${event.error}' received`);
+});
 
-cardreader.on('card-inserted', function (reader, status) {
+devices.on('card-inserted', function (event) {
 
-    console.info(`Card inserted into '${reader.name}', atr: '${status.atr.toString('hex')}'`);
+    console.log(`List devices: ${devices.listDevices()}`);
 
-    let application = emvApplication(cardreader);
+    var reader = event.reader;
+    console.log(`Card inserted into '${reader.name}', atr: '${event.status.atr.toString('hex')}'`);
+
+
+    let application = emvApplication(devices, reader);
     application
         .selectPse()
         .then(function (response) {
