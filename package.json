@@ -32,7 +32,7 @@
   "dependencies": {
     "card-reader": "^1.0.3",
     "hexify": "^1.0.1",
-    "iso7816": "^1.0.19",
+    "iso7816": "^1.0.20",
     "tlv": "^1.1.1"
   },
   "devDependencies": {
