@@ -6,5 +6,6 @@ declare module 'tlv' {
 
     function parse(buffer: Buffer): TlvData;
 
-    export = { parse };
+    export { parse };
+    export default { parse };
 }
