@@ -6,6 +6,8 @@ import {
     selectPse,
     selectApp,
     listApps,
+    readRecord,
+    getData,
     type CommandContext,
 } from './commands.js';
 
@@ -361,6 +363,130 @@ describe('Commands', () => {
             const result = await listApps(ctx, { emv: mockEmv });
             assert.strictEqual(result, 0);
             assert.ok(outputs.some((o) => o.includes('No applications')));
+        });
+    });
+
+    describe('readRecord', () => {
+        it('should read a record and display data', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                readRecord: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x70, 0x08, 0x5a, 0x06, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await readRecord(ctx, 1, 1, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('Record 1')));
+        });
+
+        it('should show error when record not found', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                readRecord: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.alloc(0),
+                        sw1: 0x6a,
+                        sw2: 0x83,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await readRecord(ctx, 1, 1, { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('failed')));
+        });
+
+        it('should validate SFI range', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await readRecord(ctx, 0, 1, {});
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('SFI')));
+        });
+
+        it('should validate record number range', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await readRecord(ctx, 1, 300, {});
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('Record')));
+        });
+    });
+
+    describe('getData', () => {
+        it('should get data by tag and display result', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            // PIN try counter response: 9F17 01 03
+            const mockEmv = {
+                getData: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x9f, 0x17, 0x01, 0x03]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await getData(ctx, '9f17', { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('9f17')));
+        });
+
+        it('should show error when data not found', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                getData: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.alloc(0),
+                        sw1: 0x6a,
+                        sw2: 0x88,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await getData(ctx, '9f17', { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('failed')));
+        });
+
+        it('should validate tag format', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await getData(ctx, 'invalid', {});
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('Invalid tag')));
+        });
+
+        it('should accept 1-byte tags', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                getData: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x9c, 0x01, 0x00]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await getData(ctx, '9c', { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('9c')));
         });
     });
 });
