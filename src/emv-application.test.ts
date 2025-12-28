@@ -448,4 +448,58 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x85);
         });
     });
+
+    describe('internalAuthenticate', () => {
+        it('should throw RangeError for empty authentication data', async () => {
+            await assert.rejects(
+                () => emv.internalAuthenticate(Buffer.alloc(0)),
+                /Authentication data must not be empty/
+            );
+        });
+
+        it('should transmit INTERNAL AUTHENTICATE APDU', async () => {
+            const authData = Buffer.from([0x12, 0x34, 0x56, 0x78]);
+            await emv.internalAuthenticate(authData);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x00); // CLA
+            assert.strictEqual(apdu[1], 0x88); // INS: INTERNAL AUTHENTICATE
+            assert.strictEqual(apdu[2], 0x00); // P1
+            assert.strictEqual(apdu[3], 0x00); // P2
+            assert.strictEqual(apdu[4], 0x04); // Lc
+            assert.strictEqual(apdu[5], 0x12); // Data
+            assert.strictEqual(apdu[6], 0x34);
+            assert.strictEqual(apdu[7], 0x56);
+            assert.strictEqual(apdu[8], 0x78);
+            assert.strictEqual(apdu[9], 0x00); // Le
+        });
+
+        it('should accept authentication data as array', async () => {
+            await emv.internalAuthenticate([0xaa, 0xbb, 0xcc, 0xdd]);
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[4], 0x04); // Lc
+            assert.strictEqual(apdu[5], 0xaa);
+        });
+
+        it('should return signed data on success', async () => {
+            // Response with signed dynamic data
+            mockCard.transmit = async () => Buffer.from([
+                0x80, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x90, 0x00
+            ]);
+            const response = await emv.internalAuthenticate([0x12, 0x34, 0x56, 0x78]);
+            assert.strictEqual(response.isOk(), true);
+            assert.strictEqual(response.buffer.length, 10);
+        });
+
+        it('should return conditions not satisfied error', async () => {
+            mockCard.transmit = async () => Buffer.from([0x69, 0x85]);
+            const response = await emv.internalAuthenticate([0x01, 0x02, 0x03, 0x04]);
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x69);
+            assert.strictEqual(response.sw2, 0x85);
+        });
+    });
 });
