@@ -3,6 +3,7 @@
  */
 
 import { findTagInBuffer } from './emv-tags.js';
+import type { CardResponse } from './types.js';
 
 const SCARD_STATE_PRESENT = 0x20;
 
@@ -52,16 +53,6 @@ interface DevicesLike {
     stop(): void;
     on(event: string, handler: (event: unknown) => void): void;
     once(event: string, handler: (event: unknown) => void): void;
-}
-
-/**
- * CardResponse interface for EMV commands
- */
-interface CardResponse {
-    buffer: Buffer;
-    sw1: number;
-    sw2: number;
-    isOk(): boolean;
 }
 
 /**
