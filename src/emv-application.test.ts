@@ -316,4 +316,68 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x88);
         });
     });
+
+    describe('getProcessingOptions', () => {
+        it('should transmit GPO APDU with empty PDOL', async () => {
+            await emv.getProcessingOptions();
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x80); // CLA
+            assert.strictEqual(apdu[1], 0xa8); // INS: GET PROCESSING OPTIONS
+            assert.strictEqual(apdu[2], 0x00); // P1
+            assert.strictEqual(apdu[3], 0x00); // P2
+            assert.strictEqual(apdu[4], 0x02); // Lc: 2 bytes (tag 83 + length 0)
+            assert.strictEqual(apdu[5], 0x83); // Tag 83
+            assert.strictEqual(apdu[6], 0x00); // Length 0
+            assert.strictEqual(apdu[7], 0x00); // Le
+        });
+
+        it('should transmit GPO APDU with PDOL data', async () => {
+            const pdolData = Buffer.from([0x01, 0x02, 0x03, 0x04]);
+            await emv.getProcessingOptions(pdolData);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x80); // CLA
+            assert.strictEqual(apdu[1], 0xa8); // INS: GET PROCESSING OPTIONS
+            assert.strictEqual(apdu[4], 0x06); // Lc: 6 bytes (tag 83 + length 4 + data)
+            assert.strictEqual(apdu[5], 0x83); // Tag 83
+            assert.strictEqual(apdu[6], 0x04); // Length 4
+            assert.strictEqual(apdu[7], 0x01); // Data
+            assert.strictEqual(apdu[8], 0x02);
+            assert.strictEqual(apdu[9], 0x03);
+            assert.strictEqual(apdu[10], 0x04);
+        });
+
+        it('should accept PDOL data as array', async () => {
+            await emv.getProcessingOptions([0xaa, 0xbb]);
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[6], 0x02); // Length 2
+            assert.strictEqual(apdu[7], 0xaa);
+            assert.strictEqual(apdu[8], 0xbb);
+        });
+
+        it('should return AIP and AFL on success', async () => {
+            // Format 1 response: 80 06 1C00 08010100
+            mockCard.transmit = async () => Buffer.from([
+                0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00
+            ]);
+            const response = await emv.getProcessingOptions();
+            assert.strictEqual(response.isOk(), true);
+            assert.strictEqual(response.buffer.toString('hex'), '80061c0008010100');
+        });
+
+        it('should return conditions not satisfied error', async () => {
+            // 6985 = Conditions of use not satisfied
+            mockCard.transmit = async () => Buffer.from([0x69, 0x85]);
+            const response = await emv.getProcessingOptions();
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x69);
+            assert.strictEqual(response.sw2, 0x85);
+        });
+    });
 });
