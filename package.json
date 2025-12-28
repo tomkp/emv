@@ -2,7 +2,10 @@
     "name": "emv",
     "version": "2.0.0",
     "type": "module",
-    "description": "EMV / Chip and PIN library for PC/SC card readers",
+    "description": "EMV / Chip and PIN CLI and library for PC/SC card readers",
+    "bin": {
+        "emv": "./dist/cli.js"
+    },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
@@ -38,6 +41,7 @@
         "iso-7816",
         "chip-and-pin",
         "emv",
+        "cli",
         "typescript"
     ],
     "license": "MIT",
