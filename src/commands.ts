@@ -70,6 +70,8 @@ interface EmvLike {
     selectApplication?(aid: Buffer | readonly number[]): Promise<CardResponse>;
     readRecord?(sfi: number, record: number): Promise<CardResponse>;
     getData?(tag: number): Promise<CardResponse>;
+    getAtr?(): string;
+    getReaderName?(): string;
 }
 
 /**
@@ -471,4 +473,109 @@ export async function getData(
         ctx.error(`Get data failed - ${formatSw(response.sw1, response.sw2)}`);
         return 1;
     }
+}
+
+/**
+ * Show card information
+ */
+export async function cardInfo(
+    ctx: CommandContext,
+    options: CommandOptions = {}
+): Promise<number> {
+    const emv = options.emv;
+    if (!emv?.getAtr || !emv.getReaderName || !emv.selectPse || !emv.readRecord) {
+        ctx.error('EMV application not available');
+        return 1;
+    }
+
+    // Display ATR and reader
+    ctx.output('Card Information:');
+    ctx.output(`  Reader: ${emv.getReaderName()}`);
+    ctx.output(`  ATR: ${emv.getAtr()}`);
+    ctx.output('');
+
+    // Try to list applications
+    const pseResponse = await emv.selectPse();
+    if (pseResponse.isOk()) {
+        const sfiData = findTag(pseResponse.buffer, 0x88);
+        const sfi = sfiData?.[0] ?? 1;
+
+        interface AppInfo {
+            aid: string;
+            label: string | undefined;
+        }
+        const apps: AppInfo[] = [];
+
+        for (let record = 1; record <= 10; record++) {
+            const response = await emv.readRecord(sfi, record);
+            if (!response.isOk()) break;
+
+            const aid = findTag(response.buffer, 0x4f);
+            if (aid) {
+                const label = findTag(response.buffer, 0x50);
+                apps.push({
+                    aid: aid.toString('hex'),
+                    label: label?.toString('ascii'),
+                });
+            }
+        }
+
+        if (apps.length > 0) {
+            ctx.output('Applications:');
+            for (const app of apps) {
+                const labelStr = app.label ? ` (${app.label})` : '';
+                ctx.output(`  ${app.aid}${labelStr}`);
+            }
+        } else {
+            ctx.output('No applications found');
+        }
+    } else {
+        ctx.output('PSE not available');
+    }
+
+    return 0;
+}
+
+/**
+ * Dump all readable data from card
+ */
+export async function dumpCard(
+    ctx: CommandContext,
+    options: CommandOptions = {}
+): Promise<number> {
+    const emv = options.emv;
+    if (!emv?.getAtr || !emv.selectPse || !emv.readRecord) {
+        ctx.error('EMV application not available');
+        return 1;
+    }
+
+    ctx.output('EMV Card Dump');
+    ctx.output('=============');
+    ctx.output('');
+    ctx.output(`ATR: ${emv.getAtr()}`);
+    ctx.output('');
+
+    // Select PSE first
+    const pseResponse = await emv.selectPse();
+    if (pseResponse.isOk()) {
+        ctx.output('PSE Response:');
+        ctx.output(`  ${pseResponse.buffer.toString('hex')}`);
+        ctx.output('');
+
+        const sfiData = findTag(pseResponse.buffer, 0x88);
+        const sfi = sfiData?.[0] ?? 1;
+
+        ctx.output(`Reading SFI ${String(sfi)}:`);
+
+        for (let record = 1; record <= 10; record++) {
+            const response = await emv.readRecord(sfi, record);
+            if (!response.isOk()) break;
+
+            ctx.output(`  Record ${String(record)}: ${response.buffer.toString('hex')}`);
+        }
+    } else {
+        ctx.output('PSE selection failed');
+    }
+
+    return 0;
 }
