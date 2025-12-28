@@ -256,4 +256,64 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x83);
         });
     });
+
+    describe('getData', () => {
+        it('should throw RangeError for tag less than 0', async () => {
+            await assert.rejects(
+                () => emv.getData(-1),
+                /Tag must be a positive integer/
+            );
+        });
+
+        it('should throw RangeError for tag greater than 0xFFFF', async () => {
+            await assert.rejects(
+                () => emv.getData(0x10000),
+                /Tag must be a positive integer/
+            );
+        });
+
+        it('should transmit GET DATA APDU with 1-byte tag', async () => {
+            await emv.getData(0x9f);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x80); // CLA
+            assert.strictEqual(apdu[1], 0xca); // INS: GET DATA
+            assert.strictEqual(apdu[2], 0x00); // P1: high byte of tag
+            assert.strictEqual(apdu[3], 0x9f); // P2: low byte of tag
+            assert.strictEqual(apdu[4], 0x00); // Le
+        });
+
+        it('should transmit GET DATA APDU with 2-byte tag', async () => {
+            // 0x9F17 = PIN Try Counter
+            await emv.getData(0x9f17);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x80); // CLA
+            assert.strictEqual(apdu[1], 0xca); // INS: GET DATA
+            assert.strictEqual(apdu[2], 0x9f); // P1: high byte of tag
+            assert.strictEqual(apdu[3], 0x17); // P2: low byte of tag
+            assert.strictEqual(apdu[4], 0x00); // Le
+        });
+
+        it('should return PIN try counter data', async () => {
+            // Response: 9F17 01 03 (PIN try counter = 3)
+            mockCard.transmit = async () => Buffer.from([0x9f, 0x17, 0x01, 0x03, 0x90, 0x00]);
+            const response = await emv.getData(0x9f17);
+            assert.strictEqual(response.isOk(), true);
+            assert.strictEqual(response.buffer.toString('hex'), '9f170103');
+        });
+
+        it('should return data not found status', async () => {
+            // 6A88 = Referenced data not found
+            mockCard.transmit = async () => Buffer.from([0x6a, 0x88]);
+            const response = await emv.getData(0x9f99);
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x6a);
+            assert.strictEqual(response.sw2, 0x88);
+        });
+    });
 });
