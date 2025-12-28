@@ -50,15 +50,8 @@
     },
     "homepage": "https://github.com/tomkp/emv",
     "dependencies": {
-        "@tomkp/ber-tlv": "^1.0.1"
-    },
-    "peerDependencies": {
+        "@tomkp/ber-tlv": "^1.0.1",
         "smartcard": "^3.0.0"
-    },
-    "peerDependenciesMeta": {
-        "smartcard": {
-            "optional": true
-        }
     },
     "devDependencies": {
         "@eslint/js": "^9.17.0",
