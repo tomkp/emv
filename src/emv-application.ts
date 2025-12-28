@@ -66,8 +66,10 @@ function buildVerifyPinApdu(pin: string): Buffer {
 
     // Encode PIN digits as BCD (two digits per byte), pad with 0xF
     for (let i = 0; i < 7; i++) {
-        const digit1 = i * 2 < pinLength ? parseInt(pin[i * 2]!, 10) : 0xf;
-        const digit2 = i * 2 + 1 < pinLength ? parseInt(pin[i * 2 + 1]!, 10) : 0xf;
+        const char1 = pin[i * 2];
+        const char2 = pin[i * 2 + 1];
+        const digit1 = char1 !== undefined ? parseInt(char1, 10) : 0xf;
+        const digit2 = char2 !== undefined ? parseInt(char2, 10) : 0xf;
         pinBlock[i + 1] = (digit1 << 4) | digit2;
     }
 
