@@ -69,6 +69,23 @@ function buildGetDataApdu(tag: number): Buffer {
 }
 
 /**
+ * Build GET PROCESSING OPTIONS APDU command
+ */
+function buildGpoApdu(pdolData: Buffer): Buffer {
+    // Command data is wrapped in tag 83 (Command Template)
+    const commandData = Buffer.from([0x83, pdolData.length, ...pdolData]);
+    return Buffer.from([
+        0x80, // CLA: proprietary
+        0xa8, // INS: GET PROCESSING OPTIONS
+        0x00, // P1
+        0x00, // P2
+        commandData.length, // Lc
+        ...commandData,
+        0x00, // Le: maximum response length
+    ]);
+}
+
+/**
  * Build VERIFY PIN APDU command
  * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
  */
@@ -203,6 +220,23 @@ export class EmvApplication {
         }
 
         const apdu = buildGetDataApdu(tag);
+        const response = await this.#card.transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Initiate transaction processing (GET PROCESSING OPTIONS).
+     * @param pdolData - Optional PDOL (Processing Data Object List) values
+     * @returns CardResponse containing AIP and AFL on success:
+     *   - SW 9000: Success, AIP and AFL returned
+     *   - SW 6985: Conditions of use not satisfied
+     */
+    async getProcessingOptions(pdolData?: Buffer | readonly number[]): Promise<CardResponse> {
+        const data = pdolData
+            ? (Buffer.isBuffer(pdolData) ? pdolData : Buffer.from(pdolData))
+            : Buffer.alloc(0);
+
+        const apdu = buildGpoApdu(data);
         const response = await this.#card.transmit(apdu);
         return parseResponse(response);
     }
