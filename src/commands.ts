@@ -488,23 +488,17 @@ export async function cardInfo(
         return 1;
     }
 
-    // Display ATR and reader
-    ctx.output('Card Information:');
-    ctx.output(`  Reader: ${emv.getReaderName()}`);
-    ctx.output(`  ATR: ${emv.getAtr()}`);
-    ctx.output('');
+    interface AppInfo {
+        aid: string;
+        label: string | undefined;
+    }
+    const apps: AppInfo[] = [];
 
     // Try to list applications
     const pseResponse = await emv.selectPse();
     if (pseResponse.isOk()) {
         const sfiData = findTag(pseResponse.buffer, 0x88);
         const sfi = sfiData?.[0] ?? 1;
-
-        interface AppInfo {
-            aid: string;
-            label: string | undefined;
-        }
-        const apps: AppInfo[] = [];
 
         for (let record = 1; record <= 10; record++) {
             const response = await emv.readRecord(sfi, record);
@@ -519,6 +513,22 @@ export async function cardInfo(
                 });
             }
         }
+    }
+
+    // Output based on format
+    if (ctx.format === 'json') {
+        const result = {
+            reader: emv.getReaderName(),
+            atr: emv.getAtr(),
+            applications: apps,
+        };
+        ctx.output(JSON.stringify(result, null, 2));
+    } else {
+        // Text format (default)
+        ctx.output('Card Information:');
+        ctx.output(`  Reader: ${emv.getReaderName()}`);
+        ctx.output(`  ATR: ${emv.getAtr()}`);
+        ctx.output('');
 
         if (apps.length > 0) {
             ctx.output('Applications:');
@@ -526,11 +536,11 @@ export async function cardInfo(
                 const labelStr = app.label ? ` (${app.label})` : '';
                 ctx.output(`  ${app.aid}${labelStr}`);
             }
-        } else {
+        } else if (pseResponse.isOk()) {
             ctx.output('No applications found');
+        } else {
+            ctx.output('PSE not available');
         }
-    } else {
-        ctx.output('PSE not available');
     }
 
     return 0;
@@ -549,32 +559,62 @@ export async function dumpCard(
         return 1;
     }
 
-    ctx.output('EMV Card Dump');
-    ctx.output('=============');
-    ctx.output('');
-    ctx.output(`ATR: ${emv.getAtr()}`);
-    ctx.output('');
+    interface RecordData {
+        sfi: number;
+        record: number;
+        data: string;
+    }
+    const records: RecordData[] = [];
+    let pseHex = '';
+    let sfi = 1;
 
     // Select PSE first
     const pseResponse = await emv.selectPse();
     if (pseResponse.isOk()) {
-        ctx.output('PSE Response:');
-        ctx.output(`  ${pseResponse.buffer.toString('hex')}`);
-        ctx.output('');
-
+        pseHex = pseResponse.buffer.toString('hex');
         const sfiData = findTag(pseResponse.buffer, 0x88);
-        const sfi = sfiData?.[0] ?? 1;
-
-        ctx.output(`Reading SFI ${String(sfi)}:`);
+        sfi = sfiData?.[0] ?? 1;
 
         for (let record = 1; record <= 10; record++) {
             const response = await emv.readRecord(sfi, record);
             if (!response.isOk()) break;
 
-            ctx.output(`  Record ${String(record)}: ${response.buffer.toString('hex')}`);
+            records.push({
+                sfi,
+                record,
+                data: response.buffer.toString('hex'),
+            });
         }
+    }
+
+    // Output based on format
+    if (ctx.format === 'json') {
+        const result = {
+            atr: emv.getAtr(),
+            pse: pseHex,
+            records,
+        };
+        ctx.output(JSON.stringify(result, null, 2));
     } else {
-        ctx.output('PSE selection failed');
+        // Text format (default)
+        ctx.output('EMV Card Dump');
+        ctx.output('=============');
+        ctx.output('');
+        ctx.output(`ATR: ${emv.getAtr()}`);
+        ctx.output('');
+
+        if (pseResponse.isOk()) {
+            ctx.output('PSE Response:');
+            ctx.output(`  ${pseHex}`);
+            ctx.output('');
+
+            ctx.output(`Reading SFI ${String(sfi)}:`);
+            for (const rec of records) {
+                ctx.output(`  Record ${String(rec.record)}: ${rec.data}`);
+            }
+        } else {
+            ctx.output('PSE selection failed');
+        }
     }
 
     return 0;
