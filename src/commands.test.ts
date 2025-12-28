@@ -10,6 +10,7 @@ import {
     getData,
     cardInfo,
     dumpCard,
+    processShellCommand,
     type CommandContext,
 } from './commands.js';
 
@@ -641,6 +642,104 @@ describe('Commands', () => {
             const result = await dumpCard(ctx, { emv: mockEmv });
             assert.strictEqual(result, 0);
             assert.ok(outputs.some((o) => o.includes('SFI')));
+        });
+    });
+
+    describe('processShellCommand', () => {
+        it('should return help text for help command', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const result = await processShellCommand(ctx, 'help', {});
+            assert.strictEqual(result.action, 'continue');
+            assert.ok(outputs.some((o) => o.includes('Commands')));
+        });
+
+        it('should return exit action for quit command', async () => {
+            const { ctx } = createMockContext();
+
+            const result = await processShellCommand(ctx, 'quit', {});
+            assert.strictEqual(result.action, 'exit');
+        });
+
+        it('should return exit action for exit command', async () => {
+            const { ctx } = createMockContext();
+
+            const result = await processShellCommand(ctx, 'exit', {});
+            assert.strictEqual(result.action, 'exit');
+        });
+
+        it('should handle select-pse command', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                selectPse: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x6f, 0x10]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await processShellCommand(ctx, 'select-pse', { emv: mockEmv });
+            assert.strictEqual(result.action, 'continue');
+            assert.ok(outputs.some((o) => o.includes('PSE selected')));
+        });
+
+        it('should handle select-app command with AID', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                selectApplication: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x6f, 0x10]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await processShellCommand(ctx, 'select-app a0000000041010', { emv: mockEmv });
+            assert.strictEqual(result.action, 'continue');
+            assert.ok(outputs.some((o) => o.includes('Application selected')));
+        });
+
+        it('should handle read-record command', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                readRecord: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x70, 0x04]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await processShellCommand(ctx, 'read-record 1 1', { emv: mockEmv });
+            assert.strictEqual(result.action, 'continue');
+            assert.ok(outputs.some((o) => o.includes('Record 1')));
+        });
+
+        it('should show error for unknown command', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await processShellCommand(ctx, 'unknown-cmd', {});
+            assert.strictEqual(result.action, 'continue');
+            assert.ok(errors.some((o) => o.includes('Unknown command')));
+        });
+
+        it('should ignore empty input', async () => {
+            const { ctx, outputs, errors } = createMockContext();
+
+            const result = await processShellCommand(ctx, '', {});
+            assert.strictEqual(result.action, 'continue');
+            assert.strictEqual(outputs.length, 0);
+            assert.strictEqual(errors.length, 0);
         });
     });
 });

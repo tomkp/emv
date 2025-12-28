@@ -619,3 +619,107 @@ export async function dumpCard(
 
     return 0;
 }
+
+/**
+ * Result of processing a shell command
+ */
+export interface ShellCommandResult {
+    action: 'continue' | 'exit';
+}
+
+/**
+ * Show shell help text
+ */
+function showShellHelp(ctx: CommandContext): void {
+    ctx.output('Available Commands:');
+    ctx.output('  help                      Show this help message');
+    ctx.output('  select-pse                Select Payment System Environment');
+    ctx.output('  select-app <aid>          Select application by AID');
+    ctx.output('  read-record <sfi> <rec>   Read a record from SFI');
+    ctx.output('  get-data <tag>            Get data by EMV tag');
+    ctx.output('  list-apps                 List applications on card');
+    ctx.output('  info                      Show card information');
+    ctx.output('  quit, exit                Exit interactive mode');
+}
+
+/**
+ * Process a command in the interactive shell
+ */
+export async function processShellCommand(
+    ctx: CommandContext,
+    input: string,
+    options: CommandOptions = {}
+): Promise<ShellCommandResult> {
+    const trimmed = input.trim();
+    if (!trimmed) {
+        return { action: 'continue' };
+    }
+
+    const parts = trimmed.split(/\s+/);
+    const cmd = parts[0];
+    const args = parts.slice(1);
+
+    switch (cmd) {
+        case 'help':
+        case '?':
+            showShellHelp(ctx);
+            return { action: 'continue' };
+
+        case 'quit':
+        case 'exit':
+            return { action: 'exit' };
+
+        case 'select-pse':
+            await selectPse(ctx, options);
+            return { action: 'continue' };
+
+        case 'select-app': {
+            const aid = args[0];
+            if (!aid) {
+                ctx.error('Usage: select-app <aid>');
+            } else {
+                await selectApp(ctx, aid, options);
+            }
+            return { action: 'continue' };
+        }
+
+        case 'read-record': {
+            const sfiArg = args[0];
+            const recordArg = args[1];
+            if (!sfiArg || !recordArg) {
+                ctx.error('Usage: read-record <sfi> <record>');
+            } else {
+                const sfi = parseInt(sfiArg, 10);
+                const record = parseInt(recordArg, 10);
+                if (Number.isNaN(sfi) || Number.isNaN(record)) {
+                    ctx.error('SFI and record must be numbers');
+                } else {
+                    await readRecord(ctx, sfi, record, options);
+                }
+            }
+            return { action: 'continue' };
+        }
+
+        case 'get-data': {
+            const tag = args[0];
+            if (!tag) {
+                ctx.error('Usage: get-data <tag>');
+            } else {
+                await getData(ctx, tag, options);
+            }
+            return { action: 'continue' };
+        }
+
+        case 'list-apps':
+            await listApps(ctx, options);
+            return { action: 'continue' };
+
+        case 'info':
+            await cardInfo(ctx, options);
+            return { action: 'continue' };
+
+        default:
+            ctx.error(`Unknown command: ${String(cmd)}. Type 'help' for available commands.`);
+            return { action: 'continue' };
+    }
+}
