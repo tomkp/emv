@@ -54,6 +54,21 @@ function buildReadRecordApdu(sfi: number, record: number): Buffer {
 }
 
 /**
+ * Build GET DATA APDU command
+ */
+function buildGetDataApdu(tag: number): Buffer {
+    const p1 = (tag >> 8) & 0xff; // High byte of tag
+    const p2 = tag & 0xff; // Low byte of tag
+    return Buffer.from([
+        0x80, // CLA: proprietary
+        0xca, // INS: GET DATA
+        p1, // P1: high byte of tag
+        p2, // P2: low byte of tag
+        0x00, // Le: maximum response length
+    ]);
+}
+
+/**
  * Build VERIFY PIN APDU command
  * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
  */
@@ -171,6 +186,23 @@ export class EmvApplication {
         }
 
         const apdu = buildVerifyPinApdu(pin);
+        const response = await this.#card.transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Get data element from the card by tag.
+     * @param tag - EMV tag (1-2 bytes, e.g., 0x9F17 for PIN Try Counter)
+     * @returns CardResponse with the requested data or error status:
+     *   - SW 9000: Success, data returned
+     *   - SW 6A88: Referenced data not found
+     */
+    async getData(tag: number): Promise<CardResponse> {
+        if (!Number.isInteger(tag) || tag < 0 || tag > 0xffff) {
+            throw new RangeError('Tag must be a positive integer (0x0000-0xFFFF)');
+        }
+
+        const apdu = buildGetDataApdu(tag);
         const response = await this.#card.transmit(apdu);
         return parseResponse(response);
     }
