@@ -63,6 +63,7 @@ interface EmvLike {
     selectApplication?(aid: Buffer | readonly number[]): Promise<CardResponse>;
     readRecord?(sfi: number, record: number): Promise<CardResponse>;
     getData?(tag: number): Promise<CardResponse>;
+    verifyPin?(pin: string): Promise<CardResponse>;
     getAtr?(): string;
     getReaderName?(): string;
 }
@@ -451,6 +452,44 @@ export async function getData(
         return 0;
     } else {
         ctx.error(`Get data failed - ${formatSw(response.sw1, response.sw2)}`);
+        return 1;
+    }
+}
+
+/**
+ * Verify PIN
+ */
+export async function verifyPin(
+    ctx: CommandContext,
+    pin: string,
+    options: CommandOptions = {}
+): Promise<number> {
+    // Validate PIN format
+    if (!/^\d{4,12}$/.test(pin)) {
+        ctx.error('Invalid PIN format. PIN must be 4-12 digits.');
+        return 1;
+    }
+
+    const emv = options.emv;
+    if (!emv?.verifyPin) {
+        ctx.error('EMV application not available');
+        return 1;
+    }
+
+    const response = await emv.verifyPin(pin);
+
+    if (response.isOk()) {
+        ctx.output('PIN verified successfully');
+        return 0;
+    } else if (response.sw1 === 0x63 && (response.sw2 & 0xf0) === 0xc0) {
+        const attemptsLeft = response.sw2 & 0x0f;
+        ctx.error(`Wrong PIN. ${String(attemptsLeft)} attempt(s) remaining.`);
+        return 1;
+    } else if (response.sw1 === 0x69 && response.sw2 === 0x83) {
+        ctx.error('PIN is blocked. Card cannot be used.');
+        return 1;
+    } else {
+        ctx.error(`PIN verification failed - ${formatSw(response.sw1, response.sw2)}`);
         return 1;
     }
 }

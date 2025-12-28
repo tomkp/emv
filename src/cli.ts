@@ -12,6 +12,7 @@ import {
     listApps,
     readRecord,
     getData,
+    verifyPin,
     cardInfo,
     dumpCard,
     processShellCommand,
@@ -79,6 +80,7 @@ Commands:
   list-apps            List applications on card
   read-record <sfi> <record>  Read a record
   get-data <tag>       Get data by EMV tag
+  verify-pin <pin>     Verify cardholder PIN
   dump                 Dump all readable card data
   shell                Interactive mode
 
@@ -179,6 +181,14 @@ async function runCommand(
                 return 1;
             }
             return getData(ctx, tagArg);
+        }
+        case 'verify-pin': {
+            const pin = args[0];
+            if (!pin) {
+                ctx.error('Usage: emv verify-pin <pin>');
+                return 1;
+            }
+            return verifyPin(ctx, pin);
         }
         case 'info':
             return cardInfo(ctx);
