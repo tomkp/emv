@@ -87,16 +87,87 @@ devices.start();
 import { EmvApplication } from 'emv';
 
 const emv = new EmvApplication(reader, card);
+```
 
+#### Selection Commands
+
+```typescript
 // Select Payment System Environment
 const response = await emv.selectPse();
 
 // Select an application by AID
 const response = await emv.selectApplication([0xa0, 0x00, 0x00, 0x00, 0x04]);
+```
 
+#### Read Commands
+
+```typescript
 // Read a record from SFI
 const response = await emv.readRecord(sfi, recordNumber);
 
+// Get data by EMV tag (e.g., PIN Try Counter)
+const response = await emv.getData(0x9f17);
+if (response.isOk()) {
+    // Parse TLV: 9F17 01 03 = 3 attempts remaining
+    console.log('PIN tries left:', response.buffer[3]);
+}
+```
+
+#### PIN Verification
+
+```typescript
+// Verify cardholder PIN (plaintext)
+const response = await emv.verifyPin('1234');
+
+if (response.isOk()) {
+    console.log('PIN verified successfully');
+} else if (response.sw1 === 0x63 && (response.sw2 & 0xf0) === 0xc0) {
+    const attemptsLeft = response.sw2 & 0x0f;
+    console.log(`Wrong PIN, ${attemptsLeft} attempts remaining`);
+} else if (response.sw1 === 0x69 && response.sw2 === 0x83) {
+    console.log('PIN is blocked');
+}
+```
+
+#### Transaction Processing
+
+```typescript
+// 1. Initiate transaction with GET PROCESSING OPTIONS
+const gpoResponse = await emv.getProcessingOptions();
+// Or with PDOL data:
+const gpoResponse = await emv.getProcessingOptions(pdolData);
+
+if (gpoResponse.isOk()) {
+    // Response contains AIP and AFL
+    console.log('Transaction initiated');
+}
+
+// 2. Generate Application Cryptogram
+// ARQC (0x80) = go online, TC (0x40) = approve offline, AAC (0x00) = decline
+const acResponse = await emv.generateAc(0x80, cdolData);
+
+if (acResponse.isOk()) {
+    // Parse cryptogram from response for online authorization
+    console.log('Cryptogram generated');
+}
+```
+
+#### Card Authentication (DDA)
+
+```typescript
+// Internal Authenticate for Dynamic Data Authentication
+const unpredictableNumber = Buffer.from([0x12, 0x34, 0x56, 0x78]);
+const response = await emv.internalAuthenticate(unpredictableNumber);
+
+if (response.isOk()) {
+    // Verify signed data using ICC Public Key
+    const signedData = response.buffer;
+}
+```
+
+#### Utility Methods
+
+```typescript
 // Get card ATR
 const atr = emv.getAtr();
 
