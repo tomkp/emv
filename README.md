@@ -8,7 +8,7 @@ EMV / Chip and PIN library for PC/SC card readers.
 ## Installation
 
 ```bash
-npm install emv smartcard
+npm install emv
 ```
 
 **Requirements:**
