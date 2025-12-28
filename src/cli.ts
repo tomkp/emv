@@ -3,6 +3,7 @@ import { parseArgs as nodeParseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { listReaders, waitForCard, type CommandContext } from './commands.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -102,9 +103,41 @@ export function showVersion(): string {
 }
 
 /**
+ * Create command context from parsed options
+ */
+function createContext(options: ParsedOptions): CommandContext {
+    return {
+        output: (msg: string) => {
+            console.log(msg);
+        },
+        error: (msg: string) => {
+            console.error(msg);
+        },
+        readerName: options.reader,
+        format: options.format,
+        verbose: options.verbose,
+    };
+}
+
+/**
+ * Run a command and handle errors
+ */
+async function runCommand(command: string, ctx: CommandContext): Promise<number> {
+    switch (command) {
+        case 'readers':
+            return listReaders(ctx);
+        case 'wait':
+            return waitForCard(ctx);
+        default:
+            ctx.error(`Command '${command}' not yet implemented`);
+            return 1;
+    }
+}
+
+/**
  * Main CLI entry point
  */
-function main(): void {
+async function main(): Promise<void> {
     const args = parseArgs(process.argv.slice(2));
 
     if (args.options.help) {
@@ -124,9 +157,11 @@ function main(): void {
         return;
     }
 
-    // Commands will be implemented in subsequent steps
-    console.error(`Command '${command}' not yet implemented`);
-    process.exitCode = 1;
+    const ctx = createContext(args.options);
+    process.exitCode = await runCommand(command, ctx);
 }
 
-main();
+main().catch((error: unknown) => {
+    console.error('Error:', error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+});
