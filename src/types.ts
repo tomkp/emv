@@ -6,6 +6,10 @@ export interface CardResponse {
     buffer: Buffer;
     /** Check if the response indicates success (SW1=0x90, SW2=0x00) */
     isOk(): boolean;
+    /** Status word 1 */
+    sw1: number;
+    /** Status word 2 */
+    sw2: number;
 }
 
 /**
@@ -31,21 +35,19 @@ export interface EmvApplicationInfo {
 }
 
 /**
- * Card reader device interface
+ * Card interface from smartcard package
  */
-export interface CardReader {
+export interface SmartCard {
+    /** Answer to Reset */
+    atr: Buffer;
+    /** Transmit APDU command to card */
+    transmit(apdu: Buffer | number[]): Promise<Buffer>;
+}
+
+/**
+ * Reader interface from smartcard package
+ */
+export interface Reader {
+    /** Reader name */
     name: string;
 }
-
-/**
- * ISO7816 interface for smartcard communication
- */
-export interface Iso7816 {
-    selectFile(data: Buffer | number[]): Promise<CardResponse>;
-    readRecord(sfi: number, record: number): Promise<CardResponse>;
-}
-
-/**
- * Factory function type for creating ISO7816 instances
- */
-export type Iso7816Factory = (devices: unknown, cardReader: CardReader) => Iso7816;

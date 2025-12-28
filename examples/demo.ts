@@ -1,112 +1,107 @@
 /**
- * EMV Demo - Example usage of the EMV library
+ * EMV Demo - Example usage of the EMV library with smartcard package
  *
  * This example demonstrates how to:
- * - Connect to a card reader
+ * - Connect to a card reader using the smartcard package
  * - Select the PSE (Payment System Environment)
  * - Read application records
  * - Extract Application IDs (AIDs)
  */
 
-import devices from 'card-reader';
+import { Devices } from 'smartcard';
 import { EmvApplication, format, findTag } from '../src/index.js';
 
-interface DeviceEvent {
-    reader: { name: string };
-}
-
+// Type definitions for smartcard events
 interface CardEvent {
     reader: { name: string };
-    status: { atr: Buffer };
+    card: {
+        atr: Buffer;
+        transmit(apdu: Buffer | number[]): Promise<Buffer>;
+    };
 }
 
-interface CommandEvent {
-    reader: { name: string };
-    command: string;
-}
-
-interface ResponseEvent {
-    reader: { name: string };
-    command: string;
-    response: string;
+interface ReaderEvent {
+    name: string;
 }
 
 interface ErrorEvent {
-    error: Error;
+    message: string;
 }
 
-devices.on('device-activated', (event: DeviceEvent) => {
-    console.log(`Device '${event.reader.name}' activated, devices: ${devices.listDevices()}`);
+const devices = new Devices();
+
+devices.on('reader-attached', (reader: ReaderEvent) => {
+    console.log(`Reader attached: ${reader.name}`);
 });
 
-devices.on('device-deactivated', (event: DeviceEvent) => {
-    console.log(`Device '${event.reader.name}' deactivated, devices: ${devices.listDevices()}`);
+devices.on('reader-detached', (reader: ReaderEvent) => {
+    console.log(`Reader detached: ${reader.name}`);
 });
 
-devices.on('card-removed', (event: DeviceEvent) => {
-    console.log(`Card removed from '${event.reader.name}'`);
+devices.on('card-removed', ({ reader }: { reader: ReaderEvent }) => {
+    console.log(`Card removed from '${reader.name}'`);
 });
 
-devices.on('command-issued', (event: CommandEvent) => {
-    console.log(`Command '${event.command}' issued to '${event.reader.name}'`);
+devices.on('error', (err: ErrorEvent) => {
+    console.error(`Error: ${err.message}`);
 });
 
-devices.on('response-received', (event: ResponseEvent) => {
-    console.log(
-        `Response '${event.response}' received from '${event.reader.name}' in response to '${event.command}'`
-    );
-});
+devices.on('card-inserted', async ({ reader, card }: CardEvent) => {
+    console.log(`Card inserted into '${reader.name}', ATR: '${card.atr.toString('hex')}'`);
 
-devices.on('error', (event: ErrorEvent) => {
-    console.log(`Error '${event.error}' received`);
-});
+    const application = new EmvApplication(reader, card);
 
-devices.on('card-inserted', (event: CardEvent) => {
-    console.log(`List devices: ${devices.listDevices()}`);
+    try {
+        // Select PSE
+        const pseResponse = await application.selectPse();
+        console.info(`Select PSE Response:\n${format(pseResponse)}`);
 
-    const reader = event.reader;
-    console.log(`Card inserted into '${reader.name}', atr: '${event.status.atr.toString('hex')}'`);
+        const sfiBuffer = findTag(pseResponse, 0x88);
+        if (!sfiBuffer) {
+            console.error('SFI not found in response');
+            return;
+        }
 
-    const application = new EmvApplication(devices, reader);
+        const sfi = sfiBuffer[0];
+        if (sfi === undefined) {
+            console.error('Invalid SFI value');
+            return;
+        }
 
-    application
-        .selectPse()
-        .then((response) => {
-            console.info(`Select PSE Response:\n${format(response)}`);
+        const aids: string[] = [];
 
-            const sfiBuffer = findTag(response, 0x88);
-            if (!sfiBuffer) {
-                throw new Error('SFI not found in response');
+        // Read records to find AIDs
+        for (let record = 1; record <= 10; record++) {
+            const response = await application.readRecord(sfi, record);
+
+            if (!response.isOk()) {
+                break; // No more records
             }
 
-            const sfi = sfiBuffer.toString('hex');
-            const records = [0, 1, 2, 3, 4, 5, 6];
-            const aids: string[] = [];
+            console.info(`Read Record ${record} Response:\n${format(response)}`);
 
-            let queue = Promise.resolve<string[]>(aids);
+            const aid = findTag(response, 0x4f);
+            if (aid) {
+                const aidHex = aid.toString('hex');
+                console.info(`Found Application ID: '${aidHex}'`);
+                aids.push(aidHex);
+            }
+        }
 
-            records.forEach((record) => {
-                queue = queue.then(() => {
-                    return application.readRecord(parseInt(sfi, 16), record).then((response) => {
-                        if (response.isOk()) {
-                            console.info(`Read Record Response: \n${format(response)}`);
-                            const aid = findTag(response, 0x4f);
-                            if (aid) {
-                                console.info(`Application ID: '${aid.toString('hex')}'`);
-                                aids.push(aid.toString('hex'));
-                            }
-                        }
-                        return aids;
-                    });
-                });
-            });
+        console.info(`\nApplication IDs found: ${aids.length > 0 ? aids.join(', ') : 'none'}`);
+    } catch (error) {
+        console.error('Error:', error);
+    }
+});
 
-            return queue;
-        })
-        .then((applicationIds) => {
-            console.info(`Application IDs: '${applicationIds.join(', ')}'`);
-        })
-        .catch((error) => {
-            console.error('Error:', error);
-        });
+// Start monitoring for readers
+devices.start();
+
+console.log('Waiting for card reader... (Press Ctrl+C to exit)');
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\nShutting down...');
+    devices.stop();
+    process.exit(0);
 });
