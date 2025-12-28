@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EMV_TAGS, format, findTag, getTagName } from './index.js';
+import { EMV_TAGS, format, findTag, findTagInBuffer, getTagName } from './index.js';
 import type { CardResponse } from './types.js';
 
 function createMockResponse(buffer: Buffer): CardResponse {
@@ -74,6 +74,29 @@ describe('findTag', () => {
         );
         const result = findTag(response, 0x84);
         assert.strictEqual(result?.toString('hex'), 'a0000000041010');
+    });
+});
+
+describe('findTagInBuffer', () => {
+    it('should find a tag in a Buffer', () => {
+        const buffer = Buffer.from([0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10]);
+        const result = findTagInBuffer(buffer, 0x4f);
+        assert.ok(Buffer.isBuffer(result));
+        assert.strictEqual(result?.toString('hex'), 'a0000000041010');
+    });
+
+    it('should return undefined for non-existent tags', () => {
+        const buffer = Buffer.from([0x50, 0x04, 0x56, 0x49, 0x53, 0x41]);
+        const result = findTagInBuffer(buffer, 0x9999);
+        assert.strictEqual(result, undefined);
+    });
+
+    it('should find tag in nested TLV structure', () => {
+        const buffer = Buffer.from([
+            0x6f, 0x0c, 0x84, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10, 0x88, 0x01, 0x01,
+        ]);
+        const result = findTagInBuffer(buffer, 0x88);
+        assert.strictEqual(result?.toString('hex'), '01');
     });
 });
 
