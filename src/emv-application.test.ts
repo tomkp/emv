@@ -165,4 +165,95 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x83);
         });
     });
+
+    describe('verifyPin', () => {
+        it('should throw RangeError for PIN shorter than 4 digits', async () => {
+            await assert.rejects(
+                () => emv.verifyPin('123'),
+                /PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should throw RangeError for PIN longer than 12 digits', async () => {
+            await assert.rejects(
+                () => emv.verifyPin('1234567890123'),
+                /PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should throw RangeError for non-numeric PIN', async () => {
+            await assert.rejects(
+                () => emv.verifyPin('12ab'),
+                /PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should transmit VERIFY APDU with correct format', async () => {
+            await emv.verifyPin('1234');
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x00); // CLA
+            assert.strictEqual(apdu[1], 0x20); // INS: VERIFY
+            assert.strictEqual(apdu[2], 0x00); // P1
+            assert.strictEqual(apdu[3], 0x80); // P2: plaintext PIN
+            assert.strictEqual(apdu[4], 0x08); // Lc: 8 bytes
+        });
+
+        it('should encode 4-digit PIN correctly in BCD format', async () => {
+            await emv.verifyPin('1234');
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+
+            // PIN block: 0x24 (length=4) + 0x12 0x34 0xFF 0xFF 0xFF 0xFF 0xFF
+            assert.strictEqual(apdu[5], 0x24); // 0x20 | 4
+            assert.strictEqual(apdu[6], 0x12);
+            assert.strictEqual(apdu[7], 0x34);
+            assert.strictEqual(apdu[8], 0xff);
+            assert.strictEqual(apdu[9], 0xff);
+            assert.strictEqual(apdu[10], 0xff);
+            assert.strictEqual(apdu[11], 0xff);
+            assert.strictEqual(apdu[12], 0xff);
+        });
+
+        it('should encode 6-digit PIN correctly', async () => {
+            await emv.verifyPin('123456');
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+
+            // PIN block: 0x26 (length=6) + 0x12 0x34 0x56 0xFF 0xFF 0xFF 0xFF
+            assert.strictEqual(apdu[5], 0x26);
+            assert.strictEqual(apdu[6], 0x12);
+            assert.strictEqual(apdu[7], 0x34);
+            assert.strictEqual(apdu[8], 0x56);
+            assert.strictEqual(apdu[9], 0xff);
+        });
+
+        it('should return success for correct PIN', async () => {
+            mockCard.transmit = async () => Buffer.from([0x90, 0x00]);
+            const response = await emv.verifyPin('1234');
+            assert.strictEqual(response.isOk(), true);
+            assert.strictEqual(response.sw1, 0x90);
+            assert.strictEqual(response.sw2, 0x00);
+        });
+
+        it('should return wrong PIN status with remaining attempts', async () => {
+            // 63C2 = wrong PIN, 2 attempts remaining
+            mockCard.transmit = async () => Buffer.from([0x63, 0xc2]);
+            const response = await emv.verifyPin('0000');
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x63);
+            assert.strictEqual(response.sw2, 0xc2);
+        });
+
+        it('should return PIN blocked status', async () => {
+            // 6983 = PIN blocked
+            mockCard.transmit = async () => Buffer.from([0x69, 0x83]);
+            const response = await emv.verifyPin('0000');
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x69);
+            assert.strictEqual(response.sw2, 0x83);
+        });
+    });
 });

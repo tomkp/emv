@@ -54,6 +54,34 @@ function buildReadRecordApdu(sfi: number, record: number): Buffer {
 }
 
 /**
+ * Build VERIFY PIN APDU command
+ * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
+ */
+function buildVerifyPinApdu(pin: string): Buffer {
+    const pinLength = pin.length;
+    const pinBlock = Buffer.alloc(8);
+
+    // First byte: 0x20 | PIN length
+    pinBlock[0] = 0x20 | pinLength;
+
+    // Encode PIN digits as BCD (two digits per byte), pad with 0xF
+    for (let i = 0; i < 7; i++) {
+        const digit1 = i * 2 < pinLength ? parseInt(pin[i * 2]!, 10) : 0xf;
+        const digit2 = i * 2 + 1 < pinLength ? parseInt(pin[i * 2 + 1]!, 10) : 0xf;
+        pinBlock[i + 1] = (digit1 << 4) | digit2;
+    }
+
+    return Buffer.from([
+        0x00, // CLA
+        0x20, // INS: VERIFY
+        0x00, // P1
+        0x80, // P2: plaintext PIN
+        0x08, // Lc: PIN block is always 8 bytes
+        ...pinBlock,
+    ]);
+}
+
+/**
  * EMV Application for interacting with chip cards via PC/SC readers.
  *
  * @example
@@ -122,6 +150,25 @@ export class EmvApplication {
         }
 
         const apdu = buildReadRecordApdu(sfi, record);
+        const response = await this.#card.transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Verify the cardholder PIN (plaintext).
+     * @param pin - PIN code as a string of 4-12 digits
+     * @returns CardResponse with status words indicating success or failure:
+     *   - SW 9000: PIN verified successfully
+     *   - SW 63CX: Wrong PIN, X attempts remaining
+     *   - SW 6983: PIN blocked (too many failed attempts)
+     *   - SW 6984: PIN not initialized
+     */
+    async verifyPin(pin: string): Promise<CardResponse> {
+        if (!/^\d{4,12}$/.test(pin)) {
+            throw new RangeError('PIN must be a string of 4-12 digits');
+        }
+
+        const apdu = buildVerifyPinApdu(pin);
         const response = await this.#card.transmit(apdu);
         return parseResponse(response);
     }
