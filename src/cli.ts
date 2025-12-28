@@ -11,6 +11,8 @@ import {
     listApps,
     readRecord,
     getData,
+    cardInfo,
+    dumpCard,
     type CommandContext,
 } from './commands.js';
 
@@ -176,6 +178,10 @@ async function runCommand(
             }
             return getData(ctx, tagArg);
         }
+        case 'info':
+            return cardInfo(ctx);
+        case 'dump':
+            return dumpCard(ctx);
         default:
             ctx.error(`Command '${command}' not yet implemented`);
             return 1;

@@ -8,6 +8,8 @@ import {
     listApps,
     readRecord,
     getData,
+    cardInfo,
+    dumpCard,
     type CommandContext,
 } from './commands.js';
 
@@ -487,6 +489,105 @@ describe('Commands', () => {
             const result = await getData(ctx, '9c', { emv: mockEmv });
             assert.strictEqual(result, 0);
             assert.ok(outputs.some((o) => o.includes('9c')));
+        });
+    });
+
+    describe('cardInfo', () => {
+        it('should display ATR and applications', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const pseResponse = {
+                buffer: Buffer.from([
+                    0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46,
+                    0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e,
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            const recordResponse = {
+                buffer: Buffer.from([
+                    0x70, 0x1a, 0x61, 0x18, 0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10, 0x50, 0x0a, 0x4d,
+                    0x61, 0x73, 0x74, 0x65, 0x72, 0x43, 0x61, 0x72, 0x64, 0x87, 0x01, 0x01,
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            const emptyResponse = {
+                buffer: Buffer.alloc(0),
+                sw1: 0x6a,
+                sw2: 0x83,
+                isOk: () => false,
+            };
+
+            let readRecordCalls = 0;
+            const mockEmv = {
+                getAtr: () => '3b9000',
+                getReaderName: () => 'Test Reader',
+                selectPse: mock.fn(() => Promise.resolve(pseResponse)),
+                readRecord: mock.fn(() => {
+                    readRecordCalls++;
+                    if (readRecordCalls === 1) {
+                        return Promise.resolve(recordResponse);
+                    }
+                    return Promise.resolve(emptyResponse);
+                }),
+            };
+
+            const result = await cardInfo(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('3b9000')));
+            assert.ok(outputs.some((o) => o.includes('Test Reader')));
+        });
+    });
+
+    describe('dumpCard', () => {
+        it('should dump all records', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const pseResponse = {
+                buffer: Buffer.from([
+                    0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46,
+                    0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e,
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            const recordResponse = {
+                buffer: Buffer.from([0x70, 0x04, 0x5a, 0x02, 0x12, 0x34]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            const emptyResponse = {
+                buffer: Buffer.alloc(0),
+                sw1: 0x6a,
+                sw2: 0x83,
+                isOk: () => false,
+            };
+
+            let readRecordCalls = 0;
+            const mockEmv = {
+                getAtr: () => '3b9000',
+                selectPse: mock.fn(() => Promise.resolve(pseResponse)),
+                readRecord: mock.fn(() => {
+                    readRecordCalls++;
+                    if (readRecordCalls <= 2) {
+                        return Promise.resolve(recordResponse);
+                    }
+                    return Promise.resolve(emptyResponse);
+                }),
+            };
+
+            const result = await dumpCard(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('SFI')));
         });
     });
 });
