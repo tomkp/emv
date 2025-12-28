@@ -2,6 +2,8 @@
  * CLI command implementations
  */
 
+import { findTagInBuffer } from './emv-tags.js';
+
 const SCARD_STATE_PRESENT = 0x20;
 
 /**
@@ -270,59 +272,6 @@ export async function selectApp(
 }
 
 /**
- * Find a tag in TLV data
- */
-function findTag(data: Buffer, tag: number): Buffer | undefined {
-    let offset = 0;
-    while (offset < data.length) {
-        // Read tag
-        let currentTag = data[offset];
-        if (currentTag === undefined) break;
-        offset++;
-
-        // Handle two-byte tags
-        if ((currentTag & 0x1f) === 0x1f) {
-            const byte2 = data[offset];
-            if (byte2 === undefined) break;
-            currentTag = (currentTag << 8) | byte2;
-            offset++;
-        }
-
-        // Read length
-        let length = data[offset];
-        if (length === undefined) break;
-        offset++;
-
-        if (length === 0x81) {
-            length = data[offset];
-            if (length === undefined) break;
-            offset++;
-        } else if (length === 0x82) {
-            const b1 = data[offset];
-            const b2 = data[offset + 1];
-            if (b1 === undefined || b2 === undefined) break;
-            length = (b1 << 8) | b2;
-            offset += 2;
-        }
-
-        // Check if this is our tag
-        if (currentTag === tag) {
-            return data.subarray(offset, offset + length);
-        }
-
-        // If this is a constructed tag, search inside
-        if ((currentTag & 0x20) !== 0) {
-            const nested = findTag(data.subarray(offset, offset + length), tag);
-            if (nested) return nested;
-        }
-
-        offset += length;
-    }
-
-    return undefined;
-}
-
-/**
  * List applications on card from PSE
  */
 export async function listApps(
@@ -343,7 +292,7 @@ export async function listApps(
     }
 
     // Find SFI from PSE response (tag 88)
-    const sfiData = findTag(pseResponse.buffer, 0x88);
+    const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
     const sfi = sfiData?.[0] ?? 1;
 
     // Read records to find applications
@@ -359,10 +308,10 @@ export async function listApps(
         if (!response.isOk()) break;
 
         // Look for AID (tag 4F) in record
-        const aid = findTag(response.buffer, 0x4f);
+        const aid = findTagInBuffer(response.buffer, 0x4f);
         if (aid) {
-            const label = findTag(response.buffer, 0x50);
-            const priority = findTag(response.buffer, 0x87);
+            const label = findTagInBuffer(response.buffer, 0x50);
+            const priority = findTagInBuffer(response.buffer, 0x87);
 
             apps.push({
                 aid: aid.toString('hex'),
@@ -497,16 +446,16 @@ export async function cardInfo(
     // Try to list applications
     const pseResponse = await emv.selectPse();
     if (pseResponse.isOk()) {
-        const sfiData = findTag(pseResponse.buffer, 0x88);
+        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
         const sfi = sfiData?.[0] ?? 1;
 
         for (let record = 1; record <= 10; record++) {
             const response = await emv.readRecord(sfi, record);
             if (!response.isOk()) break;
 
-            const aid = findTag(response.buffer, 0x4f);
+            const aid = findTagInBuffer(response.buffer, 0x4f);
             if (aid) {
-                const label = findTag(response.buffer, 0x50);
+                const label = findTagInBuffer(response.buffer, 0x50);
                 apps.push({
                     aid: aid.toString('hex'),
                     label: label?.toString('ascii'),
@@ -572,7 +521,7 @@ export async function dumpCard(
     const pseResponse = await emv.selectPse();
     if (pseResponse.isOk()) {
         pseHex = pseResponse.buffer.toString('hex');
-        const sfiData = findTag(pseResponse.buffer, 0x88);
+        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
         sfi = sfiData?.[0] ?? 1;
 
         for (let record = 1; record <= 10; record++) {

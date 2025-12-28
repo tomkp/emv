@@ -189,13 +189,13 @@ export function format(response: CardResponse): string {
 }
 
 /**
- * Find a specific tag in a card response
- * @param response - The card response to search
+ * Find a specific tag in a Buffer containing TLV data
+ * @param buffer - The buffer to search
  * @param tag - The tag number to find (e.g., 0x4F for APP_IDENTIFIER)
  * @returns The tag value as a Buffer, or undefined if not found
  */
-export function findTag(response: CardResponse, tag: number): Buffer | undefined {
-    const parsed = parse(response.buffer);
+export function findTagInBuffer(buffer: Buffer, tag: number): Buffer | undefined {
+    const parsed = parse(buffer);
     for (const tlv of parsed) {
         const result = findInTlv(tlv, tag);
         if (result !== undefined) {
@@ -203,4 +203,14 @@ export function findTag(response: CardResponse, tag: number): Buffer | undefined
         }
     }
     return undefined;
+}
+
+/**
+ * Find a specific tag in a card response
+ * @param response - The card response to search
+ * @param tag - The tag number to find (e.g., 0x4F for APP_IDENTIFIER)
+ * @returns The tag value as a Buffer, or undefined if not found
+ */
+export function findTag(response: CardResponse, tag: number): Buffer | undefined {
+    return findTagInBuffer(response.buffer, tag);
 }
