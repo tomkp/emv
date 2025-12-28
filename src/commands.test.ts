@@ -10,6 +10,7 @@ import {
     getData,
     cardInfo,
     dumpCard,
+    verifyPin,
     processShellCommand,
     readPseApplications,
     type CommandContext,
@@ -741,6 +742,74 @@ describe('Commands', () => {
             assert.strictEqual(result.action, 'continue');
             assert.strictEqual(outputs.length, 0);
             assert.strictEqual(errors.length, 0);
+        });
+    });
+
+    describe('verifyPin', () => {
+        it('should verify PIN successfully', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                verifyPin: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await verifyPin(ctx, '1234', { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('verified')));
+        });
+
+        it('should report wrong PIN with remaining attempts', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                verifyPin: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([]),
+                        sw1: 0x63,
+                        sw2: 0xc2, // 2 attempts remaining
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await verifyPin(ctx, '1234', { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('Wrong PIN')));
+            assert.ok(errors.some((o) => o.includes('2')));
+        });
+
+        it('should report PIN blocked', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                verifyPin: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([]),
+                        sw1: 0x69,
+                        sw2: 0x83,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await verifyPin(ctx, '1234', { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('blocked')));
+        });
+
+        it('should validate PIN format', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await verifyPin(ctx, '12', { emv: {} });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('4-12 digits')));
         });
     });
 
