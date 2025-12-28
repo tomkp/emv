@@ -86,6 +86,21 @@ function buildGpoApdu(pdolData: Buffer): Buffer {
 }
 
 /**
+ * Build GENERATE APPLICATION CRYPTOGRAM APDU command
+ */
+function buildGenerateAcApdu(cryptogramType: number, cdolData: Buffer): Buffer {
+    return Buffer.from([
+        0x80, // CLA: proprietary
+        0xae, // INS: GENERATE AC
+        cryptogramType, // P1: cryptogram type
+        0x00, // P2
+        cdolData.length, // Lc
+        ...cdolData,
+        0x00, // Le: maximum response length
+    ]);
+}
+
+/**
  * Build VERIFY PIN APDU command
  * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
  */
@@ -237,6 +252,33 @@ export class EmvApplication {
             : Buffer.alloc(0);
 
         const apdu = buildGpoApdu(data);
+        const response = await this.#card.transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Generate an Application Cryptogram for transaction authorization.
+     * @param cryptogramType - Type of cryptogram to generate:
+     *   - 0x00: AAC (Application Authentication Cryptogram) - decline
+     *   - 0x40: TC (Transaction Certificate) - approve offline
+     *   - 0x80: ARQC (Authorization Request Cryptogram) - go online
+     * @param cdolData - CDOL (Card Data Object List) data
+     * @returns CardResponse containing the cryptogram on success
+     */
+    async generateAc(
+        cryptogramType: number,
+        cdolData: Buffer | readonly number[]
+    ): Promise<CardResponse> {
+        if (cryptogramType !== 0x00 && cryptogramType !== 0x40 && cryptogramType !== 0x80) {
+            throw new RangeError('Cryptogram type must be AAC (0x00), TC (0x40), or ARQC (0x80)');
+        }
+
+        const data = Buffer.isBuffer(cdolData) ? cdolData : Buffer.from(cdolData);
+        if (data.length === 0) {
+            throw new RangeError('CDOL data must not be empty');
+        }
+
+        const apdu = buildGenerateAcApdu(cryptogramType, data);
         const response = await this.#card.transmit(apdu);
         return parseResponse(response);
     }

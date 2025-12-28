@@ -380,4 +380,72 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x85);
         });
     });
+
+    describe('generateAc', () => {
+        it('should throw RangeError for invalid cryptogram type', async () => {
+            await assert.rejects(
+                () => emv.generateAc(0x20, Buffer.from([0x01])),
+                /Cryptogram type must be AAC \(0x00\), TC \(0x40\), or ARQC \(0x80\)/
+            );
+        });
+
+        it('should throw RangeError for empty CDOL data', async () => {
+            await assert.rejects(
+                () => emv.generateAc(0x80, Buffer.alloc(0)),
+                /CDOL data must not be empty/
+            );
+        });
+
+        it('should transmit GENERATE AC APDU for ARQC', async () => {
+            const cdolData = Buffer.from([0x01, 0x02, 0x03, 0x04]);
+            await emv.generateAc(0x80, cdolData);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x80); // CLA
+            assert.strictEqual(apdu[1], 0xae); // INS: GENERATE AC
+            assert.strictEqual(apdu[2], 0x80); // P1: ARQC
+            assert.strictEqual(apdu[3], 0x00); // P2
+            assert.strictEqual(apdu[4], 0x04); // Lc
+            assert.strictEqual(apdu[5], 0x01); // Data
+            assert.strictEqual(apdu[6], 0x02);
+            assert.strictEqual(apdu[7], 0x03);
+            assert.strictEqual(apdu[8], 0x04);
+            assert.strictEqual(apdu[9], 0x00); // Le
+        });
+
+        it('should transmit GENERATE AC APDU for TC', async () => {
+            await emv.generateAc(0x40, [0xaa, 0xbb]);
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[2], 0x40); // P1: TC
+        });
+
+        it('should transmit GENERATE AC APDU for AAC', async () => {
+            await emv.generateAc(0x00, [0xcc]);
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[2], 0x00); // P1: AAC
+        });
+
+        it('should return cryptogram on success', async () => {
+            // Response with Application Cryptogram
+            mockCard.transmit = async () => Buffer.from([
+                0x77, 0x12, 0x9f, 0x27, 0x01, 0x80, 0x9f, 0x36,
+                0x02, 0x00, 0x01, 0x9f, 0x26, 0x08, 0x12, 0x34,
+                0x56, 0x78, 0x9a, 0xbc, 0x90, 0x00
+            ]);
+            const response = await emv.generateAc(0x80, [0x01]);
+            assert.strictEqual(response.isOk(), true);
+        });
+
+        it('should return conditions not satisfied error', async () => {
+            mockCard.transmit = async () => Buffer.from([0x69, 0x85]);
+            const response = await emv.generateAc(0x80, [0x01]);
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x69);
+            assert.strictEqual(response.sw2, 0x85);
+        });
+    });
 });
