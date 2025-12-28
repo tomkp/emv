@@ -101,6 +101,21 @@ function buildGenerateAcApdu(cryptogramType: number, cdolData: Buffer): Buffer {
 }
 
 /**
+ * Build INTERNAL AUTHENTICATE APDU command
+ */
+function buildInternalAuthenticateApdu(authData: Buffer): Buffer {
+    return Buffer.from([
+        0x00, // CLA
+        0x88, // INS: INTERNAL AUTHENTICATE
+        0x00, // P1
+        0x00, // P2
+        authData.length, // Lc
+        ...authData,
+        0x00, // Le: maximum response length
+    ]);
+}
+
+/**
  * Build VERIFY PIN APDU command
  * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
  */
@@ -279,6 +294,22 @@ export class EmvApplication {
         }
 
         const apdu = buildGenerateAcApdu(cryptogramType, data);
+        const response = await this.#card.transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Perform internal authentication for Dynamic Data Authentication (DDA).
+     * @param authData - Authentication data (typically unpredictable number from terminal)
+     * @returns CardResponse containing signed dynamic application data
+     */
+    async internalAuthenticate(authData: Buffer | readonly number[]): Promise<CardResponse> {
+        const data = Buffer.isBuffer(authData) ? authData : Buffer.from(authData);
+        if (data.length === 0) {
+            throw new RangeError('Authentication data must not be empty');
+        }
+
+        const apdu = buildInternalAuthenticateApdu(data);
         const response = await this.#card.transmit(apdu);
         return parseResponse(response);
     }
