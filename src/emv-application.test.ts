@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EmvApplication, createEmvApplication } from '../src/index.js';
-import type { Reader, SmartCard } from '../src/types.js';
+import { EmvApplication, createEmvApplication } from './index.js';
+import type { Reader, SmartCard } from './types.js';
 
 describe('EmvApplication', () => {
     let emv: EmvApplication;

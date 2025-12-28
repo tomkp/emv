@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EMV_TAGS, format, findTag, getTagName } from '../src/index.js';
-import type { CardResponse } from '../src/types.js';
+import { EMV_TAGS, format, findTag, getTagName } from './index.js';
+import type { CardResponse } from './types.js';
 
 function createMockResponse(buffer: Buffer): CardResponse {
     return {

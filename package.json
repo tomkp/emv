@@ -19,15 +19,14 @@
     },
     "scripts": {
         "build": "tsc",
-        "build:tests": "tsc -p tests/tsconfig.json",
-        "clean": "rm -rf dist dist-tests coverage",
-        "lint": "eslint src/ tests/",
-        "lint:fix": "eslint src/ tests/ --fix",
+        "clean": "rm -rf dist coverage",
+        "lint": "eslint src/",
+        "lint:fix": "eslint src/ --fix",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "test": "node --test dist-tests/tests/*.test.js",
-        "test:coverage": "node --test --experimental-test-coverage dist-tests/tests/*.test.js",
-        "pretest": "npm run build && npm run build:tests",
+        "test": "node --test dist/*.test.js",
+        "test:coverage": "node --test --experimental-test-coverage dist/*.test.js",
+        "pretest": "npm run build",
         "prepublishOnly": "npm run clean && npm run lint && npm run build && npm run test"
     },
     "author": "tomkp <tom@tomkp.com>",
@@ -51,8 +50,15 @@
     },
     "homepage": "https://github.com/tomkp/emv",
     "dependencies": {
-        "@tomkp/ber-tlv": "^1.0.1",
-        "smartcard": "^3.4.0"
+        "@tomkp/ber-tlv": "^1.0.1"
+    },
+    "peerDependencies": {
+        "smartcard": "^3.0.0"
+    },
+    "peerDependenciesMeta": {
+        "smartcard": {
+            "optional": true
+        }
     },
     "devDependencies": {
         "@eslint/js": "^9.17.0",
