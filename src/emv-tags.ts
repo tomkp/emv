@@ -118,7 +118,10 @@ export const EMV_TAGS = {
  */
 export function getTagName(tag: number): string {
     const tagHex = tag.toString(16).toUpperCase();
-    return EMV_TAGS[tagHex as keyof typeof EMV_TAGS] ?? `UNKNOWN_${tagHex}`;
+    if (tagHex in EMV_TAGS) {
+        return EMV_TAGS[tagHex as keyof typeof EMV_TAGS];
+    }
+    return `UNKNOWN_${tagHex}`;
 }
 
 function formatTlvData(data: TlvData, indent = 0): string {
