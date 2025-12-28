@@ -9,6 +9,8 @@ import {
     selectPse,
     selectApp,
     listApps,
+    readRecord,
+    getData,
     type CommandContext,
 } from './commands.js';
 
@@ -151,6 +153,29 @@ async function runCommand(
         }
         case 'list-apps':
             return listApps(ctx);
+        case 'read-record': {
+            const sfiArg = args[0];
+            const recordArg = args[1];
+            if (!sfiArg || !recordArg) {
+                ctx.error('Usage: emv read-record <sfi> <record>');
+                return 1;
+            }
+            const sfi = parseInt(sfiArg, 10);
+            const record = parseInt(recordArg, 10);
+            if (Number.isNaN(sfi) || Number.isNaN(record)) {
+                ctx.error('SFI and record must be numbers');
+                return 1;
+            }
+            return readRecord(ctx, sfi, record);
+        }
+        case 'get-data': {
+            const tagArg = args[0];
+            if (!tagArg) {
+                ctx.error('Usage: emv get-data <tag>');
+                return 1;
+            }
+            return getData(ctx, tagArg);
+        }
         default:
             ctx.error(`Command '${command}' not yet implemented`);
             return 1;

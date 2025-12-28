@@ -69,6 +69,7 @@ interface EmvLike {
     selectPse?(): Promise<CardResponse>;
     selectApplication?(aid: Buffer | readonly number[]): Promise<CardResponse>;
     readRecord?(sfi: number, record: number): Promise<CardResponse>;
+    getData?(tag: number): Promise<CardResponse>;
 }
 
 /**
@@ -383,4 +384,91 @@ export async function listApps(
     }
 
     return 0;
+}
+
+/**
+ * Read a record from an SFI
+ */
+export async function readRecord(
+    ctx: CommandContext,
+    sfi: number,
+    record: number,
+    options: CommandOptions = {}
+): Promise<number> {
+    // Validate SFI
+    if (!Number.isInteger(sfi) || sfi < 1 || sfi > 30) {
+        ctx.error('SFI must be an integer between 1 and 30');
+        return 1;
+    }
+
+    // Validate record number
+    if (!Number.isInteger(record) || record < 0 || record > 255) {
+        ctx.error('Record number must be an integer between 0 and 255');
+        return 1;
+    }
+
+    const emv = options.emv;
+    if (!emv?.readRecord) {
+        ctx.error('EMV application not available');
+        return 1;
+    }
+
+    const response = await emv.readRecord(sfi, record);
+
+    if (response.isOk()) {
+        ctx.output(`Record ${String(record)} from SFI ${String(sfi)}:`);
+        ctx.output(`Data: ${response.buffer.toString('hex')}`);
+        return 0;
+    } else {
+        ctx.error(`Read record failed - ${formatSw(response.sw1, response.sw2)}`);
+        return 1;
+    }
+}
+
+/**
+ * Parse hex tag string to number
+ */
+function parseHexTag(tagStr: string): number | null {
+    // Remove any 0x prefix
+    const cleaned = tagStr.replace(/^0x/i, '').toLowerCase();
+
+    // Check valid hex string (1-4 hex chars for 1-2 byte tags)
+    if (!/^[0-9a-f]{1,4}$/.test(cleaned)) {
+        return null;
+    }
+
+    return parseInt(cleaned, 16);
+}
+
+/**
+ * Get data by EMV tag
+ */
+export async function getData(
+    ctx: CommandContext,
+    tagStr: string,
+    options: CommandOptions = {}
+): Promise<number> {
+    const tag = parseHexTag(tagStr);
+    if (tag === null) {
+        ctx.error('Invalid tag format. Tag must be 1-2 bytes in hex (e.g., 9f17)');
+        return 1;
+    }
+
+    const emv = options.emv;
+    if (!emv?.getData) {
+        ctx.error('EMV application not available');
+        return 1;
+    }
+
+    const response = await emv.getData(tag);
+
+    if (response.isOk()) {
+        const tagHex = tagStr.toLowerCase();
+        ctx.output(`Tag ${tagHex}:`);
+        ctx.output(`Data: ${response.buffer.toString('hex')}`);
+        return 0;
+    } else {
+        ctx.error(`Get data failed - ${formatSw(response.sw1, response.sw2)}`);
+        return 1;
+    }
 }
