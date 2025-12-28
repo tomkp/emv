@@ -109,8 +109,8 @@ export const EMV_TAGS = {
     '9F49': 'DDOL',
     '9F4A': 'STATIC_DATA_AUTHENTICATION_TAG_LIST',
     '9F4C': 'ICC_DYNAMIC_NUMBER',
-    'A5': 'FCI_TEMPLATE',
-    'BF0C': 'FCI_ISSUER_DD',
+    A5: 'FCI_TEMPLATE',
+    BF0C: 'FCI_ISSUER_DD',
 } as const;
 
 /**
