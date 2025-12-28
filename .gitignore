@@ -1,7 +1,5 @@
 node_modules/
 dist/
-dist-tests/
-lib/
 coverage/
 *.log
 *.iml
