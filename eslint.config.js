@@ -27,6 +27,14 @@ export default tseslint.config(
         },
     },
     {
-        ignores: ['dist/', 'node_modules/', 'tests/', '*.js', '*.cjs'],
+        files: ['tests/**/*.ts'],
+        rules: {
+            '@typescript-eslint/no-floating-promises': 'off',
+            '@typescript-eslint/require-await': 'off',
+            '@typescript-eslint/no-unnecessary-condition': 'off',
+        },
+    },
+    {
+        ignores: ['dist/', 'dist-tests/', 'node_modules/', '*.js', '*.cjs'],
     }
 );

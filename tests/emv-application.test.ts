@@ -1,16 +1,13 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EmvApplication, createEmvApplication } from '../dist/index.js';
+import { EmvApplication, createEmvApplication } from '../src/index.js';
+import type { Reader, SmartCard } from '../src/types.js';
 
 describe('EmvApplication', () => {
-    /** @type {EmvApplication} */
-    let emv;
-    /** @type {{ name: string }} */
-    let mockReader;
-    /** @type {{ atr: Buffer, transmit: (apdu: Buffer) => Promise<Buffer> }} */
-    let mockCard;
-    /** @type {Buffer[]} */
-    let transmitCalls;
+    let emv: EmvApplication;
+    let mockReader: Reader;
+    let mockCard: SmartCard;
+    let transmitCalls: Buffer[];
 
     beforeEach(() => {
         transmitCalls = [];
@@ -18,7 +15,7 @@ describe('EmvApplication', () => {
         mockCard = {
             atr: Buffer.from([0x3b, 0x8f, 0x80, 0x01]),
             transmit: async (apdu) => {
-                transmitCalls.push(apdu);
+                transmitCalls.push(Buffer.isBuffer(apdu) ? apdu : Buffer.from(apdu));
                 return Buffer.from([0x6f, 0x00, 0x90, 0x00]);
             },
         };
@@ -58,6 +55,7 @@ describe('EmvApplication', () => {
             assert.strictEqual(transmitCalls.length, 1);
 
             const apdu = transmitCalls[0];
+            assert.ok(apdu);
             assert.strictEqual(apdu[0], 0x00); // CLA
             assert.strictEqual(apdu[1], 0xa4); // INS: SELECT
             assert.strictEqual(apdu[2], 0x04); // P1
@@ -82,7 +80,7 @@ describe('EmvApplication', () => {
         });
 
         it('should throw RangeError for AID longer than 16 bytes', async () => {
-            const longAid = new Array(17).fill(0xa0);
+            const longAid = new Array(17).fill(0xa0) as number[];
             await assert.rejects(
                 () => emv.selectApplication(longAid),
                 /AID must be between 5 and 16 bytes/
@@ -105,6 +103,7 @@ describe('EmvApplication', () => {
             const aid = [0xa0, 0x00, 0x00, 0x00, 0x04];
             await emv.selectApplication(aid);
             const apdu = transmitCalls[0];
+            assert.ok(apdu);
             assert.strictEqual(apdu[4], 5); // Lc = length of AID
             assert.strictEqual(apdu.subarray(5, 10).toString('hex'), 'a000000004');
         });
@@ -146,11 +145,12 @@ describe('EmvApplication', () => {
 
         it('should encode SFI correctly in P2', async () => {
             mockCard.transmit = async (apdu) => {
-                transmitCalls.push(apdu);
+                transmitCalls.push(Buffer.isBuffer(apdu) ? apdu : Buffer.from(apdu));
                 return Buffer.from([0x6a, 0x83]);
             };
             await emv.readRecord(1, 1);
             const apdu = transmitCalls[0];
+            assert.ok(apdu);
             assert.strictEqual(apdu[0], 0x00); // CLA
             assert.strictEqual(apdu[1], 0xb2); // INS: READ RECORD
             assert.strictEqual(apdu[2], 1); // P1: record number

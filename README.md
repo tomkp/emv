@@ -130,14 +130,6 @@ Tested with:
 - ACR122U (contactless)
 - Any PC/SC compatible reader
 
-<div align="center">
-   <img src="docs/scr3500-collapsed.JPG" width=600 style="margin:1rem;" />
-</div>
-
-<div align="center">
-   <img src="docs/scr3500-expanded.JPG" width=600 style="margin:1rem;" />
-</div>
-
 ## License
 
 MIT
