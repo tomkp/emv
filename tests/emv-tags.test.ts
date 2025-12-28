@@ -1,12 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EMV_TAGS, format, findTag, getTagName } from '../dist/index.js';
+import { EMV_TAGS, format, findTag, getTagName } from '../src/index.js';
+import type { CardResponse } from '../src/types.js';
 
-/**
- * @param {Buffer} buffer
- * @returns {{ buffer: Buffer, isOk: () => boolean, sw1: number, sw2: number }}
- */
-function createMockResponse(buffer) {
+function createMockResponse(buffer: Buffer): CardResponse {
     return {
         buffer,
         isOk: () => true,
@@ -23,7 +20,7 @@ describe('EMV_TAGS', () => {
     });
 
     it('should include all standard EMV tags', () => {
-        const requiredTags = ['4F', '50', '5A', '5F20', '5F24', '9F26'];
+        const requiredTags = ['4F', '50', '5A', '5F20', '5F24', '9F26'] as const;
         for (const tag of requiredTags) {
             assert.ok(tag in EMV_TAGS, `Missing tag ${tag}`);
         }
@@ -94,5 +91,18 @@ describe('format', () => {
         const result = format(response);
         assert.ok(result.includes('56495341'));
         assert.ok(result.includes('VISA'));
+    });
+
+    it('should return empty string for empty buffer', () => {
+        const response = createMockResponse(Buffer.from([]));
+        const result = format(response);
+        assert.strictEqual(result, '');
+    });
+
+    it('should handle malformed TLV gracefully', () => {
+        // Truncated TLV - tag says 4 bytes but only 2 provided
+        const response = createMockResponse(Buffer.from([0x50, 0x04, 0x56, 0x49]));
+        // Should not throw, behavior depends on ber-tlv library
+        assert.doesNotThrow(() => format(response));
     });
 });

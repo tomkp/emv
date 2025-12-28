@@ -13,18 +13,6 @@ export interface CardResponse {
 }
 
 /**
- * EMV application information
- */
-export interface EmvApplicationInfo {
-    /** Application Identifier (AID) */
-    aid: Buffer;
-    /** Human-readable application label */
-    label: string;
-    /** Application priority (lower = higher priority) */
-    priority: number;
-}
-
-/**
  * Card interface from smartcard package
  */
 export interface SmartCard {
