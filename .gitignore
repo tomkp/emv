@@ -1,5 +1,9 @@
-/node_modules
-*.iml
+node_modules/
+dist/
+lib/
+coverage/
 *.log
+*.iml
 .idea
-/lib
+.DS_Store
+*.tgz
