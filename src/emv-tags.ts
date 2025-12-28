@@ -1,5 +1,16 @@
-import tlv from 'tlv';
-import type { CardResponse, TlvData } from './types.js';
+import { parse, type Tlv } from '@tomkp/ber-tlv';
+import type { CardResponse } from './types.js';
+
+/**
+ * Convert tag bytes to a single number for comparison
+ */
+function tagBytesToNumber(bytes: Uint8Array): number {
+    let result = 0;
+    for (const byte of bytes) {
+        result = (result << 8) | byte;
+    }
+    return result;
+}
 
 /**
  * EMV tag dictionary mapping hex codes to human-readable names.
@@ -124,34 +135,38 @@ export function getTagName(tag: number): string {
     return `UNKNOWN_${tagHex}`;
 }
 
-function formatTlvData(data: TlvData, indent = 0): string {
-    const tagHex = data.tag.toString(16).toUpperCase();
-    const tagName = getTagName(data.tag);
+function formatTlvData(data: Tlv, indent = 0): string {
+    const tagNum = data.tag.bytes ? tagBytesToNumber(data.tag.bytes) : data.tag.number;
+    const tagHex = tagNum.toString(16).toUpperCase();
+    const tagName = getTagName(tagNum);
     const prefix = '  '.repeat(indent);
 
     let result = `${prefix}${tagHex} (${tagName})`;
 
-    if (Buffer.isBuffer(data.value)) {
-        const hex = data.value.toString('hex').toUpperCase();
-        const ascii = data.value.toString().replace(/[^\x20-\x7E]/g, '.');
-        result += `: ${hex} [${ascii}]\n`;
-    } else if (Array.isArray(data.value)) {
+    if (data.children && data.children.length > 0) {
         result += ':\n';
-        for (const child of data.value) {
+        for (const child of data.children) {
             result += formatTlvData(child, indent + 1);
         }
+    } else {
+        const hex = Buffer.from(data.value).toString('hex').toUpperCase();
+        const ascii = Buffer.from(data.value)
+            .toString()
+            .replace(/[^\x20-\x7E]/g, '.');
+        result += `: ${hex} [${ascii}]\n`;
     }
 
     return result;
 }
 
-function findInTlv(data: TlvData, tag: number): Buffer | undefined {
-    if (data.tag === tag) {
-        return Buffer.isBuffer(data.value) ? data.value : undefined;
+function findInTlv(data: Tlv, tag: number): Buffer | undefined {
+    const tagNum = data.tag.bytes ? tagBytesToNumber(data.tag.bytes) : data.tag.number;
+    if (tagNum === tag) {
+        return Buffer.from(data.value);
     }
 
-    if (Array.isArray(data.value)) {
-        for (const child of data.value) {
+    if (data.children) {
+        for (const child of data.children) {
             const result = findInTlv(child, tag);
             if (result !== undefined) {
                 return result;
@@ -166,8 +181,11 @@ function findInTlv(data: TlvData, tag: number): Buffer | undefined {
  * Format a card response as a human-readable string
  */
 export function format(response: CardResponse): string {
-    const parsed = tlv.parse(response.buffer) as TlvData;
-    return formatTlvData(parsed);
+    const parsed = parse(response.buffer);
+    if (parsed.length === 0) {
+        return '';
+    }
+    return parsed.map((tlv) => formatTlvData(tlv)).join('');
 }
 
 /**
@@ -177,6 +195,12 @@ export function format(response: CardResponse): string {
  * @returns The tag value as a Buffer, or undefined if not found
  */
 export function findTag(response: CardResponse, tag: number): Buffer | undefined {
-    const parsed = tlv.parse(response.buffer) as TlvData;
-    return findInTlv(parsed, tag);
+    const parsed = parse(response.buffer);
+    for (const tlv of parsed) {
+        const result = findInTlv(tlv, tag);
+        if (result !== undefined) {
+            return result;
+        }
+    }
+    return undefined;
 }

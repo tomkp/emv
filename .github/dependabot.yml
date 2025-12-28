@@ -11,4 +11,4 @@ updates:
                   - '*'
               exclude-patterns:
                   - 'smartcard'
-                  - 'tlv'
+                  - '@tomkp/ber-tlv'

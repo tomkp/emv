@@ -13,16 +13,6 @@ export interface CardResponse {
 }
 
 /**
- * Parsed TLV (Tag-Length-Value) data structure
- */
-export interface TlvData {
-    /** EMV tag number */
-    tag: number;
-    /** Tag value - either raw bytes or nested TLV structures */
-    value: Buffer | TlvData[];
-}
-
-/**
  * EMV application information
  */
 export interface EmvApplicationInfo {
