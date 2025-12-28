@@ -1,6 +1,13 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert';
-import { listReaders, waitForCard, type CommandContext } from './commands.js';
+import {
+    listReaders,
+    waitForCard,
+    selectPse,
+    selectApp,
+    listApps,
+    type CommandContext,
+} from './commands.js';
 
 function createMockContext(): { ctx: CommandContext; outputs: string[]; errors: string[] } {
     const outputs: string[] = [];
@@ -171,6 +178,189 @@ describe('Commands', () => {
             const result = await waitForCard(ctx, { devices: mockDevices, timeout: 1000 });
             assert.strictEqual(result, 0);
             assert.ok(outputs.some((o) => o.includes('Specific Reader')));
+        });
+    });
+
+    describe('selectPse', () => {
+        it('should select PSE and show response', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            // PSE response with SFI
+            const pseResponse = Buffer.from([
+                0x6f, 0x1a, // FCI Template
+                0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, // DF Name
+                0xa5, 0x08, // FCI Proprietary Template
+                0x88, 0x01, 0x01, // SFI
+                0x5f, 0x2d, 0x02, 0x65, 0x6e, // Language preference
+                0x90, 0x00, // SW
+            ]);
+
+            const mockEmv = {
+                selectPse: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: pseResponse.subarray(0, -2),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await selectPse(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('PSE selected')));
+        });
+
+        it('should show error when PSE selection fails', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                selectPse: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.alloc(0),
+                        sw1: 0x6a,
+                        sw2: 0x82,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await selectPse(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('failed')));
+        });
+    });
+
+    describe('selectApp', () => {
+        it('should select application by AID', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const mockEmv = {
+                selectApplication: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x6f, 0x10, 0x84, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+            };
+
+            const result = await selectApp(ctx, 'a0000000041010', { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('Application selected')));
+        });
+
+        it('should show error for invalid AID format', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const result = await selectApp(ctx, 'invalid', {});
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('Invalid AID')));
+        });
+
+        it('should show error when application not found', async () => {
+            const { ctx, errors } = createMockContext();
+
+            const mockEmv = {
+                selectApplication: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.alloc(0),
+                        sw1: 0x6a,
+                        sw2: 0x82,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await selectApp(ctx, 'a0000000041010', { emv: mockEmv });
+            assert.strictEqual(result, 1);
+            assert.ok(errors.some((o) => o.includes('failed')));
+        });
+    });
+
+    describe('listApps', () => {
+        it('should list applications from PSE', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            // PSE response with SFI
+            const pseResponse = {
+                buffer: Buffer.from([
+                    0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46,
+                    0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e,
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            // Record with AID
+            const recordResponse = {
+                buffer: Buffer.from([
+                    0x70, 0x1a, // Record template
+                    0x61, 0x18, // Application template
+                    0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10, // AID
+                    0x50, 0x0a, 0x4d, 0x61, 0x73, 0x74, 0x65, 0x72, 0x43, 0x61, 0x72, 0x64, // Label
+                    0x87, 0x01, 0x01, // Priority
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            // Empty record (end of list)
+            const emptyResponse = {
+                buffer: Buffer.alloc(0),
+                sw1: 0x6a,
+                sw2: 0x83,
+                isOk: () => false,
+            };
+
+            let readRecordCalls = 0;
+            const mockEmv = {
+                selectPse: mock.fn(() => Promise.resolve(pseResponse)),
+                readRecord: mock.fn(() => {
+                    readRecordCalls++;
+                    if (readRecordCalls === 1) {
+                        return Promise.resolve(recordResponse);
+                    }
+                    return Promise.resolve(emptyResponse);
+                }),
+            };
+
+            const result = await listApps(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('a0000000041010')));
+        });
+
+        it('should show message when no applications found', async () => {
+            const { ctx, outputs } = createMockContext();
+
+            const pseResponse = {
+                buffer: Buffer.from([
+                    0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46,
+                    0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f, 0x2d, 0x02, 0x65, 0x6e,
+                ]),
+                sw1: 0x90,
+                sw2: 0x00,
+                isOk: () => true,
+            };
+
+            const emptyResponse = {
+                buffer: Buffer.alloc(0),
+                sw1: 0x6a,
+                sw2: 0x83,
+                isOk: () => false,
+            };
+
+            const mockEmv = {
+                selectPse: mock.fn(() => Promise.resolve(pseResponse)),
+                readRecord: mock.fn(() => Promise.resolve(emptyResponse)),
+            };
+
+            const result = await listApps(ctx, { emv: mockEmv });
+            assert.strictEqual(result, 0);
+            assert.ok(outputs.some((o) => o.includes('No applications')));
         });
     });
 });

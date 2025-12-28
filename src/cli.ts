@@ -3,7 +3,14 @@ import { parseArgs as nodeParseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { listReaders, waitForCard, type CommandContext } from './commands.js';
+import {
+    listReaders,
+    waitForCard,
+    selectPse,
+    selectApp,
+    listApps,
+    type CommandContext,
+} from './commands.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -122,12 +129,28 @@ function createContext(options: ParsedOptions): CommandContext {
 /**
  * Run a command and handle errors
  */
-async function runCommand(command: string, ctx: CommandContext): Promise<number> {
+async function runCommand(
+    command: string,
+    args: string[],
+    ctx: CommandContext
+): Promise<number> {
     switch (command) {
         case 'readers':
             return listReaders(ctx);
         case 'wait':
             return waitForCard(ctx);
+        case 'select-pse':
+            return selectPse(ctx);
+        case 'select-app': {
+            const aid = args[0];
+            if (!aid) {
+                ctx.error('Usage: emv select-app <aid>');
+                return 1;
+            }
+            return selectApp(ctx, aid);
+        }
+        case 'list-apps':
+            return listApps(ctx);
         default:
             ctx.error(`Command '${command}' not yet implemented`);
             return 1;
@@ -158,7 +181,8 @@ async function main(): Promise<void> {
     }
 
     const ctx = createContext(args.options);
-    process.exitCode = await runCommand(command, ctx);
+    const commandArgs = args.positionals.slice(1);
+    process.exitCode = await runCommand(command, commandArgs, ctx);
 }
 
 main().catch((error: unknown) => {
