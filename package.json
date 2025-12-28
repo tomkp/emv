@@ -1,43 +1,72 @@
 {
-  "name": "emv",
-  "version": "1.0.7",
-  "main": "lib/emv-application.js",
-  "description": "",
-  "scripts": {
-    "compile": "babel -d lib/ src/",
-    "compile:watch": "babel -w -d lib/ src/",
-    "prepublish": "npm run compile",
-    "release:patch": "npm run compile && npm version patch && git push && npm publish"
-  },
-  "author": "tomkp <tom@tomkp.com>",
-  "keywords": [
-    "pcsc",
-    "smartcard",
-    "smart-card",
-    "iso7816",
-    "iso-7816",
-    "chip-and-pin",
-    "emv",
-    "es6"
-  ],
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/tomkp/emv.git"
-  },
-  "bugs": {
-    "url": "https://github.com/tomkp/emv/issues"
-  },
-  "homepage": "https://github.com/tomkp/emv",
-  "dependencies": {
-    "card-reader": "^1.0.5",
-    "hexify": "^1.0.4",
-    "iso7816": "^1.0.20",
-    "tlv": "^1.1.1"
-  },
-  "devDependencies": {
-    "@babel/cli": "^7.12.16",
-    "@babel/core": "^7.12.16",
-    "@babel/preset-env": "^7.12.16"
-  }
+    "name": "emv",
+    "version": "2.0.0",
+    "type": "module",
+    "description": "EMV / Chip and PIN library for PC/SC card readers",
+    "exports": {
+        ".": {
+            "import": {
+                "types": "./dist/index.d.ts",
+                "default": "./dist/index.js"
+            },
+            "require": {
+                "types": "./dist/index.d.cts",
+                "default": "./dist/index.cjs"
+            }
+        }
+    },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint src/",
+        "lint:fix": "eslint src/ --fix",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "prepublishOnly": "npm run lint && npm run typecheck && npm run build"
+    },
+    "author": "tomkp <tom@tomkp.com>",
+    "keywords": [
+        "pcsc",
+        "smartcard",
+        "smart-card",
+        "iso7816",
+        "iso-7816",
+        "chip-and-pin",
+        "emv",
+        "typescript"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tomkp/emv.git"
+    },
+    "bugs": {
+        "url": "https://github.com/tomkp/emv/issues"
+    },
+    "homepage": "https://github.com/tomkp/emv",
+    "dependencies": {
+        "card-reader": "^1.0.5",
+        "iso7816": "^1.0.20",
+        "tlv": "^1.1.1"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.17.0",
+        "@types/node": "^22.0.0",
+        "eslint": "^9.17.0",
+        "globals": "^15.14.0",
+        "prettier": "^3.4.2",
+        "tsup": "^8.5.1",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.50.1"
+    }
 }

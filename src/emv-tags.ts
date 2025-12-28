@@ -1,8 +1,11 @@
-'use strict';
-
 import tlv from 'tlv';
+import type { CardResponse, TlvData } from './types.js';
 
-let emvTags = {
+/**
+ * EMV tag dictionary mapping hex codes to human-readable names.
+ * Based on EMV Book 3 specification.
+ */
+export const EMV_TAGS = {
     '4F': 'APP_IDENTIFIER',
     '50': 'APP_LABEL',
     '57': 'TRACK_2',
@@ -18,7 +21,7 @@ let emvTags = {
     '5F36': 'TRANSACTION_CURRENCY_EXPONENT',
     '5F50': 'ISSUER_URL',
     '61': 'APPLICATION_TEMPLATE',
-    '6F': 'FILE_CONTROL_log',
+    '6F': 'FILE_CONTROL_INFO',
     '70': 'EMV_APP_ELEMENTARY_FILE',
     '71': 'ISSUER_SCRIPT_TEMPLATE_1',
     '72': 'ISSUER_SCRIPT_TEMPLATE_2',
@@ -46,7 +49,7 @@ let emvTags = {
     '98': 'TC_HASH_VALUE',
     '99': 'TRANSACTION_PIN_DATA',
     '9A': 'TRANSACTION_DATE',
-    '9B': 'TRANSACTION_STATUS_logRMATION',
+    '9B': 'TRANSACTION_STATUS_INFORMATION',
     '9C': 'TRANSACTION_TYPE',
     '9D': 'DIRECTORY_DEFINITION_FILE',
     '9F01': 'ACQUIRER_ID',
@@ -80,14 +83,14 @@ let emvTags = {
     '9F22': 'CA_PK_INDEX_TERM',
     '9F23': 'UPPER_OFFLINE_LIMIT',
     '9F26': 'APPLICATION_CRYPTOGRAM',
-    '9F27': 'CRYPTOGRAM_logRMATION_DATA',
+    '9F27': 'CRYPTOGRAM_INFORMATION_DATA',
     '9F2D': 'ICC_PIN_ENCIPHERMENT_PK_CERT',
     '9F32': 'ISSUER_PK_EXPONENT',
     '9F33': 'TERMINAL_CAPABILITIES',
     '9F34': 'CVM_RESULTS',
     '9F35': 'APP_TERMINAL_TYPE',
     '9F36': 'APP_TRANSACTION_COUNTER',
-    '9F37': 'APP_UNPREDICATABLE_NUMBER',
+    '9F37': 'APP_UNPREDICTABLE_NUMBER',
     '9F38': 'ICC_PDOL',
     '9F39': 'POS_ENTRY_MODE',
     '9F3A': 'AMOUNT_REF_CURRENCY',
@@ -106,49 +109,71 @@ let emvTags = {
     '9F49': 'DDOL',
     '9F4A': 'STATIC_DATA_AUTHENTICATION_TAG_LIST',
     '9F4C': 'ICC_DYNAMIC_NUMBER',
-    'A5': 'FCI_TEMPLATE',
-    'BF0C': 'FCI_ISSUER_DD'
-};
+    A5: 'FCI_TEMPLATE',
+    BF0C: 'FCI_ISSUER_DD',
+} as const;
 
-
-function toString(data) {
-    const value = data.value;
-    let decoded = '\n';
-    if (Buffer.isBuffer(value)) {
-        decoded = value.toString() + ' ' + value.toString('hex');
-    }
-    let str = '' + data.tag.toString(16) + ' (' + emvTags[data.tag.toString(16).toUpperCase()] + ') ' + decoded;
-    if (data.value && Array.isArray(data.value)) {
-        data.value.forEach(function (child) {
-            str += '\t' + toString(child);
-        });
-    }
-    str += '\n';
-    return str;
+/**
+ * Get the human-readable name for an EMV tag
+ */
+export function getTagName(tag: number): string {
+    const tagHex = tag.toString(16).toUpperCase();
+    return EMV_TAGS[tagHex as keyof typeof EMV_TAGS] ?? `UNKNOWN_${tagHex}`;
 }
 
+function formatTlvData(data: TlvData, indent = 0): string {
+    const tagHex = data.tag.toString(16).toUpperCase();
+    const tagName = getTagName(data.tag);
+    const prefix = '  '.repeat(indent);
 
-function find(data, tag) {
-    if (data.tag === tag) {
-        return data.value;
-    } else if (data.value && Array.isArray(data.value)) {
-        for (let i = 0; i < data.value.length; i++) {
-            let result = find(data.value[i], tag);
-            if (result) return result;
+    let result = `${prefix}${tagHex} (${tagName})`;
+
+    if (Buffer.isBuffer(data.value)) {
+        const hex = data.value.toString('hex').toUpperCase();
+        const ascii = data.value.toString().replace(/[^\x20-\x7E]/g, '.');
+        result += `: ${hex} [${ascii}]\n`;
+    } else if (Array.isArray(data.value)) {
+        result += ':\n';
+        for (const child of data.value) {
+            result += formatTlvData(child, indent + 1);
         }
     }
+
+    return result;
 }
 
-function format(response) {
-    return toString(tlv.parse(response.buffer));
+function findInTlv(data: TlvData, tag: number): Buffer | undefined {
+    if (data.tag === tag) {
+        return Buffer.isBuffer(data.value) ? data.value : undefined;
+    }
+
+    if (Array.isArray(data.value)) {
+        for (const child of data.value) {
+            const result = findInTlv(child, tag);
+            if (result !== undefined) {
+                return result;
+            }
+        }
+    }
+
+    return undefined;
 }
 
-function findTag(response, tag) {
-    return find(tlv.parse(response.buffer), tag)
+/**
+ * Format a card response as a human-readable string
+ */
+export function format(response: CardResponse): string {
+    const parsed = tlv.parse(response.buffer) as TlvData;
+    return formatTlvData(parsed);
 }
 
-
-module.exports = {
-    format: format,
-    findTag: findTag
-};
+/**
+ * Find a specific tag in a card response
+ * @param response - The card response to search
+ * @param tag - The tag number to find (e.g., 0x4F for APP_IDENTIFIER)
+ * @returns The tag value as a Buffer, or undefined if not found
+ */
+export function findTag(response: CardResponse, tag: number): Buffer | undefined {
+    const parsed = tlv.parse(response.buffer) as TlvData;
+    return findInTlv(parsed, tag);
+}
