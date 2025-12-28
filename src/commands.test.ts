@@ -11,6 +11,7 @@ import {
     cardInfo,
     dumpCard,
     processShellCommand,
+    readPseApplications,
     type CommandContext,
 } from './commands.js';
 
@@ -740,6 +741,72 @@ describe('Commands', () => {
             assert.strictEqual(result.action, 'continue');
             assert.strictEqual(outputs.length, 0);
             assert.strictEqual(errors.length, 0);
+        });
+    });
+
+    describe('readPseApplications', () => {
+        it('should return applications from PSE records', async () => {
+            const mockEmv = {
+                selectPse: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([0x6f, 0x05, 0x88, 0x01, 0x01, 0x90, 0x00]),
+                        sw1: 0x90,
+                        sw2: 0x00,
+                        isOk: () => true,
+                    })
+                ),
+                readRecord: mock.fn((_sfi: number, record: number) => {
+                    if (record === 1) {
+                        // Record with AID and label
+                        return Promise.resolve({
+                            buffer: Buffer.from([
+                                0x70, 0x12, 0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10,
+                                0x50, 0x04, 0x56, 0x49, 0x53, 0x41, 0x87, 0x01, 0x01,
+                            ]),
+                            sw1: 0x90,
+                            sw2: 0x00,
+                            isOk: () => true,
+                        });
+                    }
+                    return Promise.resolve({
+                        buffer: Buffer.from([]),
+                        sw1: 0x6a,
+                        sw2: 0x83,
+                        isOk: () => false,
+                    });
+                }),
+            };
+
+            const result = await readPseApplications({ emv: mockEmv });
+            assert.strictEqual(result.pseOk, true);
+            assert.strictEqual(result.apps.length, 1);
+            assert.strictEqual(result.apps[0]?.aid, 'a0000000041010');
+            assert.strictEqual(result.apps[0]?.label, 'VISA');
+            assert.strictEqual(result.records.length, 1);
+            assert.strictEqual(result.records[0]?.record, 1);
+        });
+
+        it('should return empty apps when PSE fails', async () => {
+            const mockEmv = {
+                selectPse: mock.fn(() =>
+                    Promise.resolve({
+                        buffer: Buffer.from([]),
+                        sw1: 0x6a,
+                        sw2: 0x82,
+                        isOk: () => false,
+                    })
+                ),
+            };
+
+            const result = await readPseApplications({ emv: mockEmv });
+            assert.strictEqual(result.pseOk, false);
+            assert.strictEqual(result.apps.length, 0);
+        });
+
+        it('should return empty apps when emv is not available', async () => {
+            const result = await readPseApplications({});
+            assert.strictEqual(result.pseOk, false);
+            assert.strictEqual(result.apps.length, 0);
         });
     });
 });

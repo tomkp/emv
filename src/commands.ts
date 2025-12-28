@@ -263,42 +263,65 @@ export async function selectApp(
 }
 
 /**
- * List applications on card from PSE
+ * Application information from PSE
  */
-export async function listApps(
-    ctx: CommandContext,
-    options: CommandOptions = {}
-): Promise<number> {
+export interface PseAppInfo {
+    aid: string;
+    label: string | undefined;
+    priority: number | undefined;
+}
+
+/**
+ * Record data from PSE
+ */
+export interface PseRecordData {
+    sfi: number;
+    record: number;
+    data: string;
+}
+
+/**
+ * Result of reading PSE applications
+ */
+export interface PseReadResult {
+    pseOk: boolean;
+    pseBuffer: Buffer;
+    sfi: number;
+    apps: PseAppInfo[];
+    records: PseRecordData[];
+}
+
+/**
+ * Read applications from Payment System Environment
+ * This is a shared helper used by listApps, cardInfo, and dumpCard
+ */
+export async function readPseApplications(options: CommandOptions = {}): Promise<PseReadResult> {
     const emv = options.emv;
     if (!emv?.selectPse || !emv.readRecord) {
-        ctx.error('EMV application not available');
-        return 1;
+        return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
     }
 
-    // First select PSE
     const pseResponse = await emv.selectPse();
     if (!pseResponse.isOk()) {
-        ctx.error(`PSE selection failed - ${formatSw(pseResponse.sw1, pseResponse.sw2)}`);
-        return 1;
+        return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
     }
 
-    // Find SFI from PSE response (tag 88)
     const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
     const sfi = sfiData?.[0] ?? 1;
 
-    // Read records to find applications
-    interface AppInfo {
-        aid: string;
-        label: string | undefined;
-        priority: number | undefined;
-    }
-    const apps: AppInfo[] = [];
+    const apps: PseAppInfo[] = [];
+    const records: PseRecordData[] = [];
 
     for (let record = 1; record <= 10; record++) {
         const response = await emv.readRecord(sfi, record);
         if (!response.isOk()) break;
 
-        // Look for AID (tag 4F) in record
+        records.push({
+            sfi,
+            record,
+            data: response.buffer.toString('hex'),
+        });
+
         const aid = findTagInBuffer(response.buffer, 0x4f);
         if (aid) {
             const label = findTagInBuffer(response.buffer, 0x50);
@@ -312,14 +335,31 @@ export async function listApps(
         }
     }
 
-    if (apps.length === 0) {
+    return { pseOk: true, pseBuffer: pseResponse.buffer, sfi, apps, records };
+}
+
+/**
+ * List applications on card from PSE
+ */
+export async function listApps(
+    ctx: CommandContext,
+    options: CommandOptions = {}
+): Promise<number> {
+    const result = await readPseApplications(options);
+
+    if (!result.pseOk) {
+        ctx.error('EMV application not available or PSE selection failed');
+        return 1;
+    }
+
+    if (result.apps.length === 0) {
         ctx.output('No applications found on card');
         return 0;
     }
 
-    ctx.output(`Found ${String(apps.length)} application(s):\n`);
+    ctx.output(`Found ${String(result.apps.length)} application(s):\n`);
 
-    for (const app of apps) {
+    for (const app of result.apps) {
         const labelStr = app.label ? ` - ${app.label}` : '';
         const priorityStr = app.priority !== undefined ? ` (priority: ${String(app.priority)})` : '';
         ctx.output(`  ${app.aid}${labelStr}${priorityStr}`);
@@ -423,37 +463,13 @@ export async function cardInfo(
     options: CommandOptions = {}
 ): Promise<number> {
     const emv = options.emv;
-    if (!emv?.getAtr || !emv.getReaderName || !emv.selectPse || !emv.readRecord) {
+    if (!emv?.getAtr || !emv.getReaderName) {
         ctx.error('EMV application not available');
         return 1;
     }
 
-    interface AppInfo {
-        aid: string;
-        label: string | undefined;
-    }
-    const apps: AppInfo[] = [];
-
-    // Try to list applications
-    const pseResponse = await emv.selectPse();
-    if (pseResponse.isOk()) {
-        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-        const sfi = sfiData?.[0] ?? 1;
-
-        for (let record = 1; record <= 10; record++) {
-            const response = await emv.readRecord(sfi, record);
-            if (!response.isOk()) break;
-
-            const aid = findTagInBuffer(response.buffer, 0x4f);
-            if (aid) {
-                const label = findTagInBuffer(response.buffer, 0x50);
-                apps.push({
-                    aid: aid.toString('hex'),
-                    label: label?.toString('ascii'),
-                });
-            }
-        }
-    }
+    const pseResult = await readPseApplications(options);
+    const apps = pseResult.apps.map((app) => ({ aid: app.aid, label: app.label }));
 
     // Output based on format
     if (ctx.format === 'json') {
@@ -476,7 +492,7 @@ export async function cardInfo(
                 const labelStr = app.label ? ` (${app.label})` : '';
                 ctx.output(`  ${app.aid}${labelStr}`);
             }
-        } else if (pseResponse.isOk()) {
+        } else if (pseResult.pseOk) {
             ctx.output('No applications found');
         } else {
             ctx.output('PSE not available');
@@ -494,45 +510,20 @@ export async function dumpCard(
     options: CommandOptions = {}
 ): Promise<number> {
     const emv = options.emv;
-    if (!emv?.getAtr || !emv.selectPse || !emv.readRecord) {
+    if (!emv?.getAtr) {
         ctx.error('EMV application not available');
         return 1;
     }
 
-    interface RecordData {
-        sfi: number;
-        record: number;
-        data: string;
-    }
-    const records: RecordData[] = [];
-    let pseHex = '';
-    let sfi = 1;
-
-    // Select PSE first
-    const pseResponse = await emv.selectPse();
-    if (pseResponse.isOk()) {
-        pseHex = pseResponse.buffer.toString('hex');
-        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-        sfi = sfiData?.[0] ?? 1;
-
-        for (let record = 1; record <= 10; record++) {
-            const response = await emv.readRecord(sfi, record);
-            if (!response.isOk()) break;
-
-            records.push({
-                sfi,
-                record,
-                data: response.buffer.toString('hex'),
-            });
-        }
-    }
+    const pseResult = await readPseApplications(options);
+    const pseHex = pseResult.pseBuffer.toString('hex');
 
     // Output based on format
     if (ctx.format === 'json') {
         const result = {
             atr: emv.getAtr(),
             pse: pseHex,
-            records,
+            records: pseResult.records,
         };
         ctx.output(JSON.stringify(result, null, 2));
     } else {
@@ -543,13 +534,13 @@ export async function dumpCard(
         ctx.output(`ATR: ${emv.getAtr()}`);
         ctx.output('');
 
-        if (pseResponse.isOk()) {
+        if (pseResult.pseOk) {
             ctx.output('PSE Response:');
             ctx.output(`  ${pseHex}`);
             ctx.output('');
 
-            ctx.output(`Reading SFI ${String(sfi)}:`);
-            for (const rec of records) {
+            ctx.output(`Reading SFI ${String(pseResult.sfi)}:`);
+            for (const rec of pseResult.records) {
                 ctx.output(`  Record ${String(rec.record)}: ${rec.data}`);
             }
         } else {
