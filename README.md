@@ -12,10 +12,12 @@ npm install emv smartcard
 ```
 
 **Requirements:**
+
 - Node.js 20 or later
 - PC/SC library installed on your system
 
 **Linux:**
+
 ```bash
 sudo apt-get install libpcsclite-dev pcscd
 sudo systemctl start pcscd
@@ -123,6 +125,7 @@ console.log(EMV_TAGS['4F']); // 'APP_IDENTIFIER'
 ## Compatible Readers
 
 Tested with:
+
 - SCM SCR3500 Smart Card Reader
 - ACR122U (contactless)
 - Any PC/SC compatible reader
