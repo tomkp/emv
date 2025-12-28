@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
-import { EmvApplication } from '../dist/index.js';
+import { EmvApplication, createEmvApplication } from '../dist/index.js';
 
 describe('EmvApplication', () => {
     /** @type {EmvApplication} */
@@ -28,6 +28,13 @@ describe('EmvApplication', () => {
     describe('constructor', () => {
         it('should create an instance', () => {
             assert.ok(emv instanceof EmvApplication);
+        });
+    });
+
+    describe('createEmvApplication', () => {
+        it('should create an EmvApplication instance', () => {
+            const instance = createEmvApplication(mockReader, mockCard);
+            assert.ok(instance instanceof EmvApplication);
         });
     });
 
