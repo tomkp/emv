@@ -1,75 +1,131 @@
 # EMV
 
-EMV / Chip and PIN library
+[![CI](https://github.com/tomkp/emv/actions/workflows/ci.yml/badge.svg)](https://github.com/tomkp/emv/actions/workflows/ci.yml)
+[![npm version](https://badge.fury.io/js/emv.svg)](https://www.npmjs.com/package/emv)
 
-http://card-spy.surge.sh/
+EMV / Chip and PIN library for PC/SC card readers.
 
-## Examples
+## Installation
 
-```javascript
-var cardreader = require('card-reader');
-var emvTags = require('../lib/emvTags');
-var emvApplication = require('../lib/emvApplication');
+```bash
+npm install emv smartcard
+```
 
-cardreader.on('device-activated', function (reader) {
-    console.info(`Device '${reader.name}' activated`);
-});
+**Requirements:**
+- Node.js 20 or later
+- PC/SC library installed on your system
 
-cardreader.on('device-deactivated', function (reader) {
-    console.info(`Device '${reader}' deactivated`);
-});
+**Linux:**
+```bash
+sudo apt-get install libpcsclite-dev pcscd
+sudo systemctl start pcscd
+```
 
-cardreader.on('card-removed', function (reader) {
-    console.info(`Card removed from '${reader.name}' `);
-});
+**macOS/Windows:** No additional setup required.
 
-cardreader.on('command-issued', function (reader, command) {
-    console.info(`Command '${command.toString('hex')}' issued to '${reader.name}' `);
-});
+## Usage
 
-cardreader.on('response-received', function (reader, response) {
-    console.info(`Response '${response}' received from '${reader.name}' `);
-});
+```typescript
+import { Devices } from 'smartcard';
+import { EmvApplication, format, findTag } from 'emv';
 
-cardreader.on('card-inserted', function (reader, status) {
-    console.info(`Card inserted into '${reader.name}', atr: '${status.atr.toString('hex')}'`);
+const devices = new Devices();
 
-    var application = emvApplication(cardreader);
-    application
-        .selectPse()
-        .then(function (response) {
-            console.info(`Select PSE Response:\n${emvTags.format(response)}`);
-            var sfi = 1;
-            var record = 0;
-            while (record++ < 10) {
-                application
-                    .readRecord(sfi, record)
-                    .then(function (response) {
-                        if (response.isOk()) {
-                            console.info(`Read Record Response: ${emvTags.format(response)}`);
-                            var aid = emvTags.findTag(response, 0x4f);
-                            if (aid) {
-                                console.info(`Application ID: '${aid.toString('hex')}`);
-                            }
-                        }
-                        return response;
-                    })
-                    .catch(function (error) {
-                        console.error('Read Record Error:', error, error.stack);
-                    });
+devices.on('card-inserted', async ({ reader, card }) => {
+    console.log(`Card inserted into '${reader.name}'`);
+    console.log(`ATR: ${card.atr.toString('hex')}`);
+
+    const emv = new EmvApplication(reader, card);
+
+    try {
+        // Select Payment System Environment
+        const pseResponse = await emv.selectPse();
+        console.log(`PSE Response:\n${format(pseResponse)}`);
+
+        // Find SFI tag
+        const sfiBuffer = findTag(pseResponse, 0x88);
+        if (!sfiBuffer) {
+            console.log('SFI not found');
+            return;
+        }
+
+        const sfi = sfiBuffer[0];
+        if (sfi === undefined) return;
+
+        // Read application records
+        for (let record = 1; record <= 10; record++) {
+            const response = await emv.readRecord(sfi, record);
+
+            if (!response.isOk()) break;
+
+            console.log(`Record ${record}:\n${format(response)}`);
+
+            const aid = findTag(response, 0x4f);
+            if (aid) {
+                console.log(`Found AID: ${aid.toString('hex')}`);
             }
-        })
-        .catch(function (error) {
-            console.error('Error:', error, error.stack);
-        });
+        }
+    } catch (error) {
+        console.error('Error:', error);
+    }
 });
+
+devices.on('error', (err) => {
+    console.error('Device error:', err.message);
+});
+
+devices.start();
+```
+
+## API
+
+### EmvApplication
+
+```typescript
+import { EmvApplication } from 'emv';
+
+const emv = new EmvApplication(reader, card);
+
+// Select Payment System Environment
+const response = await emv.selectPse();
+
+// Select an application by AID
+const response = await emv.selectApplication([0xa0, 0x00, 0x00, 0x00, 0x04]);
+
+// Read a record from SFI
+const response = await emv.readRecord(sfi, recordNumber);
+
+// Get card ATR
+const atr = emv.getAtr();
+
+// Get reader name
+const name = emv.getReaderName();
+```
+
+### Utility Functions
+
+```typescript
+import { format, findTag, getTagName, EMV_TAGS } from 'emv';
+
+// Format response as readable string
+const formatted = format(response);
+
+// Find a specific tag in response
+const aid = findTag(response, 0x4f);
+
+// Get human-readable tag name
+const name = getTagName(0x4f); // 'APP_IDENTIFIER'
+
+// Access EMV tag dictionary
+console.log(EMV_TAGS['4F']); // 'APP_IDENTIFIER'
 ```
 
 ## Compatible Readers
 
-Tested on Mac OSX with the SCM SCR3500 Smart Card Reader.
-This library _should_ work with most PC/SC readers - I'll update this page when I get to test others.
-If you know of any other devices that work please let me know.
+Tested with:
+- SCM SCR3500 Smart Card Reader
+- ACR122U (contactless)
+- Any PC/SC compatible reader
 
 <div align="center">
    <img src="docs/scr3500-collapsed.JPG" width=600 style="margin:1rem;" />
@@ -78,3 +134,7 @@ If you know of any other devices that work please let me know.
 <div align="center">
    <img src="docs/scr3500-expanded.JPG" width=600 style="margin:1rem;" />
 </div>
+
+## License
+
+MIT
