@@ -3,6 +3,7 @@ import { parseArgs as nodeParseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { createInterface } from 'node:readline';
 import {
     listReaders,
     waitForCard,
@@ -13,6 +14,7 @@ import {
     getData,
     cardInfo,
     dumpCard,
+    processShellCommand,
     type CommandContext,
 } from './commands.js';
 
@@ -182,10 +184,55 @@ async function runCommand(
             return cardInfo(ctx);
         case 'dump':
             return dumpCard(ctx);
+        case 'shell':
+            return runShell(ctx);
         default:
             ctx.error(`Command '${command}' not yet implemented`);
             return 1;
     }
+}
+
+/**
+ * Run interactive shell mode
+ */
+async function runShell(ctx: CommandContext): Promise<number> {
+    ctx.output('EMV Interactive Shell');
+    ctx.output('Type "help" for available commands, "quit" to exit');
+    ctx.output('');
+
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+
+    return new Promise((resolve) => {
+        const prompt = (): void => {
+            rl.question('emv> ', (input) => {
+                void (async () => {
+                    try {
+                        const result = await processShellCommand(ctx, input);
+                        if (result.action === 'exit') {
+                            rl.close();
+                            resolve(0);
+                            return;
+                        }
+                        prompt();
+                    } catch (error: unknown) {
+                        ctx.error(
+                            `Error: ${error instanceof Error ? error.message : String(error)}`
+                        );
+                        prompt();
+                    }
+                })();
+            });
+        };
+
+        rl.on('close', () => {
+            resolve(0);
+        });
+
+        prompt();
+    });
 }
 
 /**
