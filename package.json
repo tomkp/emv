@@ -58,8 +58,7 @@
     },
     "homepage": "https://github.com/tomkp/emv",
     "dependencies": {
-        "card-reader": "^1.0.5",
-        "iso7816": "^1.0.20",
+        "smartcard": "^3.4.0",
         "tlv": "^1.1.1"
     },
     "devDependencies": {
