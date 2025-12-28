@@ -87,7 +87,7 @@ Commands:
 Options:
   -h, --help           Show this help message
   -v, --version        Show version number
-  -f, --format <type>  Output format: text, json, hex (default: text)
+  -f, --format <type>  Output format: text, json (default: text)
   --verbose            Show detailed output
   -r, --reader <name>  Use specific reader by name
 
