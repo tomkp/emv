@@ -23,6 +23,6 @@ export default tseslint.config(
         },
     },
     {
-        ignores: ['dist/', 'lib/', 'node_modules/', 'coverage/', '*.js', '*.cjs'],
+        ignores: ['dist/', 'node_modules/', 'tests/', '*.js', '*.cjs'],
     }
 );
