@@ -114,9 +114,10 @@ function formatServiceCode(buffer: Buffer): string {
     const hex = buffer.toString('hex').toUpperCase();
     if (hex.length < 3) return hex;
 
-    const d1 = hex[0]!;
-    const d2 = hex[1]!;
-    const d3 = hex[2]!;
+    const d1 = hex[0];
+    const d2 = hex[1];
+    const d3 = hex[2];
+    if (d1 === undefined || d2 === undefined || d3 === undefined) return hex;
 
     const meanings: string[] = [];
 
@@ -175,13 +176,14 @@ function formatCvmList(buffer: Buffer): string {
     const rules: string[] = [];
 
     for (let i = 8; i + 1 < buffer.length; i += 2) {
-        const cvmByte = buffer[i]!;
-        const condByte = buffer[i + 1]!;
+        const cvmByte = buffer[i];
+        const condByte = buffer[i + 1];
+        if (cvmByte === undefined || condByte === undefined) continue;
         const cvmCode = cvmByte & 0x3f;
         const failIfUnsuccessful = (cvmByte & 0x40) === 0;
 
-        const cvmName = CVM_CODES[cvmCode] || `Unknown(${cvmCode.toString(16)})`;
-        const condName = CVM_CONDITIONS[condByte] || `Cond(${condByte.toString(16)})`;
+        const cvmName = CVM_CODES[cvmCode] ?? `Unknown(${cvmCode.toString(16)})`;
+        const condName = CVM_CONDITIONS[condByte] ?? `Cond(${condByte.toString(16)})`;
         const failStr = failIfUnsuccessful ? '' : ' [continue if fails]';
         const ruleHex = cvmByte.toString(16).padStart(2, '0').toUpperCase() +
             condByte.toString(16).padStart(2, '0').toUpperCase();
@@ -191,9 +193,9 @@ function formatCvmList(buffer: Buffer): string {
 
     let result = hex;
     if (rules.length > 0) {
-        const amountInfo = [];
-        if (amountX > 0) amountInfo.push(`X=${amountX}`);
-        if (amountY > 0) amountInfo.push(`Y=${amountY}`);
+        const amountInfo: string[] = [];
+        if (amountX > 0) amountInfo.push(`X=${String(amountX)}`);
+        if (amountY > 0) amountInfo.push(`Y=${String(amountY)}`);
         if (amountInfo.length > 0) {
             result += ` ${DIM}(${amountInfo.join(', ')})${RESET}`;
         }
@@ -275,7 +277,8 @@ function formatIacTvr(buffer: Buffer): string {
     const setBits: string[] = [];
 
     for (let byteIdx = 0; byteIdx < buffer.length && byteIdx < 5; byteIdx++) {
-        const byte = buffer[byteIdx]!;
+        const byte = buffer[byteIdx];
+        if (byte === undefined) continue;
 
         for (const [idx, mask, name] of TVR_BITS) {
             if (idx === byteIdx && (byte & mask)) {
@@ -469,7 +472,7 @@ function formatTlvData(data: Tlv, indent = 0): string {
             // For binary data (certificates, etc.), only show hex with truncation
             const hex = buffer.toString('hex').toUpperCase();
             if (hex.length > 64) {
-                result += `: ${hex.substring(0, 64)}... (${buffer.length} bytes)\n`;
+                result += `: ${hex.substring(0, 64)}... (${String(buffer.length)} bytes)\n`;
             } else {
                 result += `: ${hex}\n`;
             }
