@@ -229,8 +229,8 @@ describe('format', () => {
         // Should show truncated hex
         assert.ok(result.includes('...'), 'Should be truncated');
         assert.ok(result.includes('128 bytes'), 'Should show byte count');
-        // Should NOT show garbage ASCII
-        assert.ok(!result.includes('['), 'Should not show ASCII in brackets');
+        // Should NOT show garbage ASCII in [brackets] format (but ANSI codes with [ are ok)
+        assert.ok(!result.includes('[AB'), 'Should not show ASCII in brackets');
     });
 
     it('should format Track 1 Discretionary Data with decoded ASCII on new line', () => {
@@ -245,5 +245,45 @@ describe('format', () => {
         assert.ok(result.includes('205400932000000'), 'Should contain decoded ASCII');
         // Should NOT use bracket format
         assert.ok(!result.includes('[205400932000000]'), 'Should not show ASCII in brackets');
+    });
+
+    it('should use color coding for identifier tags', () => {
+        // Tag 5A (PAN) should use identifier color (cyan)
+        const response = createMockResponse(
+            Buffer.from([0x5a, 0x08, 0x46, 0x59, 0x41, 0x48, 0x73, 0x26, 0x86, 0x75])
+        );
+        const result = format(response);
+        // Should contain cyan ANSI code for identifier
+        assert.ok(result.includes('\x1b[36m'), 'Should use cyan color for identifier tags');
+    });
+
+    it('should use color coding for date tags', () => {
+        // Tag 5F24 (APP_EXPIRY) should use date color (yellow)
+        const response = createMockResponse(
+            Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31])
+        );
+        const result = format(response);
+        // Should contain yellow ANSI code for dates
+        assert.ok(result.includes('\x1b[33m'), 'Should use yellow color for date tags');
+    });
+
+    it('should use color coding for cryptographic tags', () => {
+        // Tag 9F26 (APPLICATION_CRYPTOGRAM) should use crypto color (magenta)
+        const response = createMockResponse(
+            Buffer.from([0x9f, 0x26, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08])
+        );
+        const result = format(response);
+        // Should contain magenta ANSI code for crypto
+        assert.ok(result.includes('\x1b[35m'), 'Should use magenta color for crypto tags');
+    });
+
+    it('should use color coding for verification tags', () => {
+        // Tag 8E (CVM_LIST) should use verification color (green)
+        const response = createMockResponse(
+            Buffer.from([0x8e, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x03])
+        );
+        const result = format(response);
+        // Should contain green ANSI code for verification
+        assert.ok(result.includes('\x1b[32m'), 'Should use green color for verification tags');
     });
 });

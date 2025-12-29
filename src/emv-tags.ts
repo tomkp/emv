@@ -4,6 +4,105 @@ import type { CardResponse } from './types.js';
 // ANSI color codes for terminal output
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
+const CYAN = '\x1b[36m'; // Identifiers (AID, PAN, names)
+const YELLOW = '\x1b[33m'; // Dates
+const MAGENTA = '\x1b[35m'; // Cryptographic (certs, keys, cryptograms)
+const GREEN = '\x1b[32m'; // Verification (CVM, PIN)
+const BLUE = '\x1b[34m'; // Transaction data (amounts, counters)
+
+/**
+ * Tag categories for color coding
+ */
+const enum TagCategory {
+    IDENTIFIER,
+    DATE,
+    CRYPTO,
+    VERIFICATION,
+    TRANSACTION,
+    DEFAULT,
+}
+
+/**
+ * Get the category for a tag to determine its color
+ */
+function getTagCategory(tagNum: number): TagCategory {
+    switch (tagNum) {
+        // Identifiers
+        case 0x4f: // APP_IDENTIFIER
+        case 0x50: // APP_LABEL
+        case 0x5a: // PAN
+        case 0x5f20: // CARDHOLDER_NAME
+        case 0x5f34: // PAN_SEQUENCE_NUMBER
+        case 0x84: // DEDICATED_FILE_NAME
+        case 0x9f06: // AID_TERMINAL
+        case 0x9f12: // APP_PREFERRED_NAME
+            return TagCategory.IDENTIFIER;
+
+        // Dates
+        case 0x5f24: // APP_EXPIRY
+        case 0x5f25: // APP_EFFECTIVE
+        case 0x9a: // TRANSACTION_DATE
+        case 0x9f21: // TRANSACTION_TIME
+            return TagCategory.DATE;
+
+        // Cryptographic
+        case 0x90: // ISSUER_PK_CERTIFICATE
+        case 0x92: // ISSUER_PK_REMAINDER
+        case 0x93: // SIGNED_STATIC_APPLICATION_DATA
+        case 0x9f26: // APPLICATION_CRYPTOGRAM
+        case 0x9f27: // CRYPTOGRAM_INFORMATION_DATA
+        case 0x9f32: // ISSUER_PK_EXPONENT
+        case 0x9f46: // ICC_PK_CERTIFICATE
+        case 0x9f47: // ICC_PK_EXPONENT
+        case 0x9f48: // ICC_PK_REMAINDER
+        case 0x9f4c: // ICC_DYNAMIC_NUMBER
+        case 0x8f: // CA_PK_INDEX
+            return TagCategory.CRYPTO;
+
+        // Verification
+        case 0x8e: // CVM_LIST
+        case 0x9f34: // CVM_RESULTS
+        case 0x9f17: // PIN_TRY_COUNT
+        case 0x9f0d: // IAC_DEFAULT
+        case 0x9f0e: // IAC_DENIAL
+        case 0x9f0f: // IAC_ONLINE
+        case 0x95: // TVR
+            return TagCategory.VERIFICATION;
+
+        // Transaction
+        case 0x9f02: // AUTH_AMOUNT_NUM
+        case 0x9f03: // OTHER_AMOUNT_NUM
+        case 0x9f36: // APP_TRANSACTION_COUNTER
+        case 0x9f41: // TRANSACTION_SEQUENCE_COUNTER
+        case 0x9c: // TRANSACTION_TYPE
+        case 0x5f2a: // TRANSACTION_CURRENCY_CODE
+        case 0x9f42: // APP_CURRENCY_CODE
+            return TagCategory.TRANSACTION;
+
+        default:
+            return TagCategory.DEFAULT;
+    }
+}
+
+/**
+ * Get the color code for a tag category
+ */
+function getTagColor(tagNum: number): string {
+    switch (getTagCategory(tagNum)) {
+        case TagCategory.IDENTIFIER:
+            return CYAN;
+        case TagCategory.DATE:
+            return YELLOW;
+        case TagCategory.CRYPTO:
+            return MAGENTA;
+        case TagCategory.VERIFICATION:
+            return GREEN;
+        case TagCategory.TRANSACTION:
+            return BLUE;
+        default:
+            return '';
+    }
+}
 
 /**
  * Convert tag bytes to a single number for comparison
@@ -464,8 +563,10 @@ function formatTlvData(data: Tlv, indent = 0): string {
     const tagHex = tagNum.toString(16).toUpperCase();
     const tagName = getTagName(tagNum);
     const prefix = '  '.repeat(indent);
+    const color = getTagColor(tagNum);
+    const colorReset = color ? RESET : '';
 
-    let result = `${prefix}${tagHex} (${tagName})`;
+    let result = `${prefix}${color}${tagHex} (${tagName})${colorReset}`;
 
     if (data.children && data.children.length > 0) {
         result += ':\n';
