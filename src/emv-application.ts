@@ -54,20 +54,6 @@ function buildReadRecordApdu(sfi: number, record: number): Buffer {
 }
 
 /**
- * Build GET RESPONSE APDU command
- * Used to retrieve data when card returns SW1=61 (more data available)
- */
-function buildGetResponseApdu(length: number): Buffer {
-    return Buffer.from([
-        0x00, // CLA
-        0xc0, // INS: GET RESPONSE
-        0x00, // P1
-        0x00, // P2
-        length, // Le: expected response length
-    ]);
-}
-
-/**
  * Build GET DATA APDU command
  */
 function buildGetDataApdu(tag: number): Buffer {
@@ -188,46 +174,10 @@ export class EmvApplication {
     }
 
     /**
-     * Transmit an APDU and handle T=0 protocol status words:
-     * - SW1=61: More data available, use GET RESPONSE
-     * - SW1=6C: Wrong Le, retry with correct length
+     * Transmit an APDU with automatic T=0 protocol handling
      */
-    async #transmitWithRetry(apdu: Buffer): Promise<Buffer> {
-        let currentApdu = apdu;
-        let response = await this.#card.transmit(currentApdu);
-        let sw1 = response[response.length - 2] ?? 0;
-        let sw2 = response[response.length - 1] ?? 0;
-
-        // Handle SW1=6C (wrong Le, retry with correct length)
-        if (sw1 === 0x6c) {
-            currentApdu = Buffer.from(apdu);
-            currentApdu[currentApdu.length - 1] = sw2;
-            response = await this.#card.transmit(currentApdu);
-            sw1 = response[response.length - 2] ?? 0;
-            sw2 = response[response.length - 1] ?? 0;
-        }
-
-        // Collect data parts for chained responses
-        const dataParts: Buffer[] = [];
-        if (response.length > 2) {
-            dataParts.push(response.subarray(0, response.length - 2));
-        }
-
-        // Handle SW1=61 (more data available)
-        while (sw1 === 0x61) {
-            const getResponse = buildGetResponseApdu(sw2);
-            response = await this.#card.transmit(getResponse);
-            sw1 = response[response.length - 2] ?? 0;
-            sw2 = response[response.length - 1] ?? 0;
-
-            if (response.length > 2) {
-                dataParts.push(response.subarray(0, response.length - 2));
-            }
-        }
-
-        // Combine all data parts with final status word
-        const combinedData = Buffer.concat(dataParts);
-        return Buffer.concat([combinedData, Buffer.from([sw1, sw2])]);
+    async #transmit(apdu: Buffer): Promise<Buffer> {
+        return this.#card.transmit(apdu, { autoGetResponse: true });
     }
 
     /**
@@ -236,7 +186,7 @@ export class EmvApplication {
      */
     async selectPse(): Promise<CardResponse> {
         const apdu = buildSelectApdu(PSE);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -252,7 +202,7 @@ export class EmvApplication {
         }
 
         const apdu = buildSelectApdu(aidBuffer);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -271,7 +221,7 @@ export class EmvApplication {
         }
 
         const apdu = buildReadRecordApdu(sfi, record);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -290,7 +240,7 @@ export class EmvApplication {
         }
 
         const apdu = buildVerifyPinApdu(pin);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -307,7 +257,7 @@ export class EmvApplication {
         }
 
         const apdu = buildGetDataApdu(tag);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -324,7 +274,7 @@ export class EmvApplication {
             : Buffer.alloc(0);
 
         const apdu = buildGpoApdu(data);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -351,7 +301,7 @@ export class EmvApplication {
         }
 
         const apdu = buildGenerateAcApdu(cryptogramType, data);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
@@ -367,7 +317,7 @@ export class EmvApplication {
         }
 
         const apdu = buildInternalAuthenticateApdu(data);
-        const response = await this.#transmitWithRetry(apdu);
+        const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
 
