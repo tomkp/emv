@@ -4,6 +4,8 @@
         "module": "NodeNext",
         "moduleResolution": "NodeNext",
         "lib": ["ES2022"],
+        "jsx": "react-jsx",
+        "jsxImportSource": "react",
         "outDir": "./dist",
         "rootDir": "./src",
         "strict": true,

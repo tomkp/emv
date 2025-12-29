@@ -69,9 +69,10 @@ export function parseArgs(args: string[]): ParsedArgs {
 export function showHelp(): string {
     return `EMV CLI - Interact with EMV chip cards
 
-Usage: emv [options] <command> [arguments]
+Usage: emv [options] [command] [arguments]
 
 Commands:
+  (no command)         Start interactive mode with beautiful UI
   readers              List available PC/SC readers
   wait                 Wait for card insertion
   info                 Show card information
@@ -82,7 +83,7 @@ Commands:
   get-data <tag>       Get data by EMV tag
   verify-pin <pin>     Verify cardholder PIN
   dump                 Dump all readable card data
-  shell                Interactive mode
+  shell                Text-based interactive mode
 
 Options:
   -h, --help           Show this help message
@@ -92,6 +93,7 @@ Options:
   -r, --reader <name>  Use specific reader by name
 
 Examples:
+  emv                            Start interactive UI mode
   emv readers                    List all connected readers
   emv wait                       Wait for a card to be inserted
   emv info                       Show card ATR and basic info
@@ -100,7 +102,7 @@ Examples:
   emv read-record 1 1            Read record 1 from SFI 1
   emv get-data 9f17              Get PIN try counter
   emv dump --format json         Dump card data as JSON
-  emv shell                      Start interactive mode
+  emv shell                      Start text-based interactive mode
 `;
 }
 
@@ -264,7 +266,9 @@ async function main(): Promise<void> {
     const command = args.positionals[0];
 
     if (!command) {
-        console.log(showHelp());
+        // Default to interactive mode when no command given
+        const { runInteractive } = await import('./interactive.js');
+        runInteractive();
         return;
     }
 
