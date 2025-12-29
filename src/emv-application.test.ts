@@ -502,4 +502,133 @@ describe('EmvApplication', () => {
             assert.strictEqual(response.sw2, 0x85);
         });
     });
+
+    describe('T=0 protocol handling', () => {
+        describe('SW1=61 (GET RESPONSE required)', () => {
+            it('should automatically send GET RESPONSE when SW1=61', async () => {
+                let callCount = 0;
+                mockCard.transmit = async (apdu) => {
+                    const buf = Buffer.isBuffer(apdu) ? apdu : Buffer.from(apdu);
+                    transmitCalls.push(buf);
+                    callCount++;
+                    if (callCount === 1) {
+                        // First call: return 61 1C (more data available, 28 bytes)
+                        return Buffer.from([0x61, 0x1c]);
+                    } else {
+                        // Second call (GET RESPONSE): return actual data
+                        return Buffer.from([
+                            0x6f, 0x1a, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59,
+                            0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46,
+                            0x30, 0x31, 0xa5, 0x08, 0x88, 0x01, 0x01, 0x5f,
+                            0x2d, 0x02, 0x65, 0x6e, 0x90, 0x00
+                        ]);
+                    }
+                };
+
+                const response = await emv.selectPse();
+
+                // Should have made 2 transmit calls
+                assert.strictEqual(transmitCalls.length, 2);
+
+                // Second call should be GET RESPONSE (00 C0 00 00 1C)
+                const getResponseApdu = transmitCalls[1];
+                assert.ok(getResponseApdu);
+                assert.strictEqual(getResponseApdu[0], 0x00); // CLA
+                assert.strictEqual(getResponseApdu[1], 0xc0); // INS: GET RESPONSE
+                assert.strictEqual(getResponseApdu[2], 0x00); // P1
+                assert.strictEqual(getResponseApdu[3], 0x00); // P2
+                assert.strictEqual(getResponseApdu[4], 0x1c); // Le = 28 bytes
+
+                // Response should be successful with data
+                assert.strictEqual(response.isOk(), true);
+                assert.strictEqual(response.sw1, 0x90);
+                assert.strictEqual(response.sw2, 0x00);
+                assert.ok(response.buffer.length > 0);
+            });
+
+            it('should handle chained GET RESPONSE (multiple 61 XX)', async () => {
+                let callCount = 0;
+                mockCard.transmit = async () => {
+                    callCount++;
+                    if (callCount === 1) {
+                        // First response: data + 61 10
+                        return Buffer.from([0x6f, 0x0a, 0x84, 0x08, 0x61, 0x10]);
+                    } else if (callCount === 2) {
+                        // Second response: more data + 61 08
+                        return Buffer.from([0x01, 0x02, 0x03, 0x04, 0x61, 0x08]);
+                    } else {
+                        // Final response: remaining data + 90 00
+                        return Buffer.from([0x05, 0x06, 0x07, 0x08, 0x90, 0x00]);
+                    }
+                };
+
+                const response = await emv.selectPse();
+                assert.strictEqual(response.isOk(), true);
+                // Should combine all data parts
+                assert.strictEqual(response.buffer.toString('hex'), '6f0a84080102030405060708');
+            });
+        });
+
+        describe('SW1=6C (wrong Le, retry with correct length)', () => {
+            it('should retry command with correct Le when SW1=6C', async () => {
+                let callCount = 0;
+                mockCard.transmit = async (apdu) => {
+                    const buf = Buffer.isBuffer(apdu) ? apdu : Buffer.from(apdu);
+                    transmitCalls.push(buf);
+                    callCount++;
+                    if (callCount === 1) {
+                        // First call: return 6C 59 (wrong Le, expected 89 bytes)
+                        return Buffer.from([0x6c, 0x59]);
+                    } else {
+                        // Second call with correct Le: return data
+                        return Buffer.from([
+                            0x70, 0x57, 0x61, 0x25, 0x4f, 0x07, 0xa0, 0x00,
+                            0x00, 0x00, 0x03, 0x10, 0x10, 0x50, 0x0a, 0x56,
+                            0x69, 0x73, 0x61, 0x20, 0x44, 0x65, 0x62, 0x69,
+                            0x74, 0x90, 0x00
+                        ]);
+                    }
+                };
+
+                const response = await emv.readRecord(1, 1);
+
+                // Should have made 2 transmit calls
+                assert.strictEqual(transmitCalls.length, 2);
+
+                // Second call should have Le = 0x59
+                const retryApdu = transmitCalls[1];
+                assert.ok(retryApdu);
+                assert.strictEqual(retryApdu[retryApdu.length - 1], 0x59);
+
+                // Response should be successful
+                assert.strictEqual(response.isOk(), true);
+                assert.ok(response.buffer.length > 0);
+            });
+        });
+
+        describe('combined SW1=6C and SW1=61 handling', () => {
+            it('should handle 6C followed by 61', async () => {
+                let callCount = 0;
+                mockCard.transmit = async (apdu) => {
+                    const buf = Buffer.isBuffer(apdu) ? apdu : Buffer.from(apdu);
+                    transmitCalls.push(buf);
+                    callCount++;
+                    if (callCount === 1) {
+                        // First: wrong Le
+                        return Buffer.from([0x6c, 0x20]);
+                    } else if (callCount === 2) {
+                        // Second: more data available
+                        return Buffer.from([0x61, 0x10]);
+                    } else {
+                        // Third: actual data
+                        return Buffer.from([0x6f, 0x0e, 0x84, 0x0c, 0x01, 0x02, 0x90, 0x00]);
+                    }
+                };
+
+                const response = await emv.selectPse();
+                assert.strictEqual(transmitCalls.length, 3);
+                assert.strictEqual(response.isOk(), true);
+            });
+        });
+    });
 });

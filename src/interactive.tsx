@@ -266,12 +266,12 @@ function ReadersScreen({ readers, onSelect, onRefresh, loading }: ReadersScreenP
         );
     }
 
-    const items = readers.map((reader) => {
+    const items = readers.map((reader, index) => {
         const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
         const icon = hasCard ? '💳' : '📖';
         const status = hasCard ? ' (card present)' : '';
         return {
-            key: reader.name,
+            key: `${reader.name}-${String(index)}`,
             label: `${icon}  ${reader.name}${status}`,
             value: reader,
         };
@@ -886,6 +886,10 @@ function App(): React.JSX.Element {
     // Handle reader selection
     const handleReaderSelect = useCallback((reader: ReaderInfo) => {
         setSelectedReader(reader);
+        // Clear previous state when selecting a new reader
+        setApps([]);
+        setEmv(null);
+        setAtr('');
         const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
 
         if (hasCard && devices) {
