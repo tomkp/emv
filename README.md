@@ -5,7 +5,7 @@
 
 EMV / Chip and PIN library for PC/SC card readers.
 
-<img width="1056" height="956" alt="CleanShot 2025-12-29 at 22 08 16@2x" src="https://github.com/user-attachments/assets/2a074179-69e5-4ad5-80d0-7497d82643df" />
+<img width="800" alt="CleanShot 2025-12-29 at 22 08 16@2x" src="https://github.com/user-attachments/assets/2a074179-69e5-4ad5-80d0-7497d82643df" />
 
 
 ## Installation
