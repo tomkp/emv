@@ -232,4 +232,18 @@ describe('format', () => {
         // Should NOT show garbage ASCII
         assert.ok(!result.includes('['), 'Should not show ASCII in brackets');
     });
+
+    it('should format Track 1 Discretionary Data with decoded ASCII on new line', () => {
+        // Tag 9F1F (TRACK_1_DD): ASCII-encoded discretionary data "205400932000000"
+        const response = createMockResponse(
+            Buffer.from([0x9f, 0x1f, 0x0f, 0x32, 0x30, 0x35, 0x34, 0x30, 0x30, 0x39, 0x33, 0x32, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('323035343030393332303030303030'), 'Should contain raw hex');
+        // Should show decoded ASCII value on new line (not in brackets)
+        assert.ok(result.includes('205400932000000'), 'Should contain decoded ASCII');
+        // Should NOT use bracket format
+        assert.ok(!result.includes('[205400932000000]'), 'Should not show ASCII in brackets');
+    });
 });

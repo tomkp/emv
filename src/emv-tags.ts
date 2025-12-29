@@ -294,6 +294,16 @@ function formatIacTvr(buffer: Buffer): string {
 }
 
 /**
+ * Format Track 1 Discretionary Data
+ * Shows hex with decoded ASCII below
+ */
+function formatTrack1Dd(buffer: Buffer): string {
+    const hex = buffer.toString('hex').toUpperCase();
+    const ascii = buffer.toString().replace(/[^\x20-\x7E]/g, '.');
+    return `${hex}\n      ${DIM}${ascii}${RESET}`;
+}
+
+/**
  * Get custom formatter for a specific tag
  */
 function getTagFormatter(tagNum: number): ((buffer: Buffer) => string) | undefined {
@@ -319,6 +329,8 @@ function getTagFormatter(tagNum: number): ((buffer: Buffer) => string) | undefin
         case 0x9f0f: // IAC_ONLINE
         case 0x95: // TVR
             return formatIacTvr;
+        case 0x9f1f: // TRACK_1_DD
+            return formatTrack1Dd;
         default:
             return undefined;
     }
