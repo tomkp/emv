@@ -13,13 +13,21 @@ export interface CardResponse {
 }
 
 /**
+ * Transmit options for smartcard package
+ */
+export interface TransmitOptions {
+    /** Automatically handle T=0 status words (SW1=61, SW1=6C) */
+    autoGetResponse?: boolean;
+}
+
+/**
  * Card interface from smartcard package
  */
 export interface SmartCard {
     /** Answer to Reset */
     atr: Buffer;
     /** Transmit APDU command to card */
-    transmit(apdu: Buffer | number[]): Promise<Buffer>;
+    transmit(apdu: Buffer | number[], options?: TransmitOptions): Promise<Buffer>;
 }
 
 /**
