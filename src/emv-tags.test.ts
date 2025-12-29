@@ -128,4 +128,108 @@ describe('format', () => {
         // Should not throw, behavior depends on ber-tlv library
         assert.doesNotThrow(() => format(response));
     });
+
+    it('should format Track 2 data with decoded fields', () => {
+        // Tag 57 (Track 2): PAN 4659414873268675, Sep D, Exp 2108, Svc 201
+        const response = createMockResponse(
+            Buffer.from([0x57, 0x13, 0x46, 0x59, 0x41, 0x48, 0x73, 0x26, 0x86, 0x75, 0xd2, 0x10, 0x82, 0x01, 0x39, 0x90, 0x00, 0x00, 0x00, 0x00, 0x1f])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('4659414873268675D2108201'), 'Should contain raw hex');
+        // Should show decoded PAN with spaces
+        assert.ok(result.includes('4659 4148 7326 8675'), 'Should contain formatted PAN');
+        // Should show decoded expiry
+        assert.ok(result.includes('2021-08'), 'Should contain formatted expiry');
+    });
+
+    it('should format PAN with spaces and show raw hex', () => {
+        // Tag 5A (PAN): 4659414873268675
+        const response = createMockResponse(
+            Buffer.from([0x5a, 0x08, 0x46, 0x59, 0x41, 0x48, 0x73, 0x26, 0x86, 0x75])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('4659414873268675'), 'Should contain raw hex');
+        // Should show formatted PAN with spaces
+        assert.ok(result.includes('4659 4148 7326 8675'), 'Should contain formatted PAN');
+    });
+
+    it('should format expiry date with raw hex and decoded date', () => {
+        // Tag 5F24 (APP_EXPIRY): 210831 = 2021-08-31
+        const response = createMockResponse(
+            Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('210831'), 'Should contain raw hex');
+        // Should show decoded date
+        assert.ok(result.includes('2021-08-31'), 'Should contain formatted date');
+    });
+
+    it('should format service code with meaning', () => {
+        // Tag 5F30 (SERVICE_CODE): 0201
+        const response = createMockResponse(
+            Buffer.from([0x5f, 0x30, 0x02, 0x02, 0x01])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('0201'), 'Should contain raw hex');
+        // Should show decoded meaning
+        assert.ok(result.includes('No restrictions'), 'Should contain service code meaning');
+    });
+
+    it('should format CVM list with rules', () => {
+        // Tag 8E (CVM_LIST): amounts X=0, Y=0, then rules 4103 (0x41 = 0x40 continue flag + 0x01 Plaintext PIN, 0x03 = if terminal supports)
+        const response = createMockResponse(
+            Buffer.from([0x8e, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41, 0x03])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('00000000000000004103'), 'Should contain raw hex');
+        // Should show rule hex
+        assert.ok(result.includes('4103'), 'Should contain rule hex');
+        // Should show decoded CVM (0x01 = Plaintext PIN by ICC)
+        assert.ok(result.includes('Plaintext PIN by ICC'), 'Should contain CVM name');
+    });
+
+    it('should format AUC flags with meaning', () => {
+        // Tag 9F07 (APP_USAGE_CONTROL): FF80 = all domestic/international cash/goods/services + ATMs + terminals + domestic cashback
+        const response = createMockResponse(
+            Buffer.from([0x9f, 0x07, 0x02, 0xff, 0x80])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('FF80'), 'Should contain raw hex');
+        // Should show some decoded flags
+        assert.ok(result.includes('Domestic cash'), 'Should contain AUC flag');
+    });
+
+    it('should format IAC flags with meaning on separate lines', () => {
+        // Tag 9F0D (IAC_DEFAULT): B800FC0000
+        const response = createMockResponse(
+            Buffer.from([0x9f, 0x0d, 0x05, 0xb8, 0x00, 0xfc, 0x00, 0x00])
+        );
+        const result = format(response);
+        // Should show raw hex
+        assert.ok(result.includes('B800FC0000'), 'Should contain raw hex');
+        // Should show decoded flags on separate lines
+        assert.ok(result.includes('Offline data auth not performed'), 'Should contain IAC flag');
+        assert.ok(result.includes('CVM not successful'), 'Should contain CVM flag');
+        // Flags should be on separate lines (contain newline before a flag)
+        assert.ok(result.includes('\n'), 'Should have newlines for multi-line display');
+    });
+
+    it('should truncate binary data for certificates', () => {
+        // Tag 90 (ISSUER_PK_CERTIFICATE): long binary data
+        const certData = Buffer.alloc(128, 0xab);
+        const tlv = Buffer.concat([Buffer.from([0x90, 0x81, 0x80]), certData]);
+        const response = createMockResponse(tlv);
+        const result = format(response);
+        // Should show truncated hex
+        assert.ok(result.includes('...'), 'Should be truncated');
+        assert.ok(result.includes('128 bytes'), 'Should show byte count');
+        // Should NOT show garbage ASCII
+        assert.ok(!result.includes('['), 'Should not show ASCII in brackets');
+    });
 });
