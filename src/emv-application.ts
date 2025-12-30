@@ -176,11 +176,19 @@ export interface CvmContext {
 }
 
 /**
- * Payment System Environment (PSE) identifier
+ * Payment System Environment (PSE) identifier for contact cards
  * "1PAY.SYS.DDF01" encoded as bytes
  */
 const PSE = Buffer.from([
     0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31,
+]);
+
+/**
+ * Proximity Payment System Environment (PPSE) identifier for contactless cards
+ * "2PAY.SYS.DDF01" encoded as bytes
+ */
+const PPSE = Buffer.from([
+    0x32, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53, 0x2e, 0x44, 0x44, 0x46, 0x30, 0x31,
 ]);
 
 /**
@@ -755,10 +763,20 @@ export class EmvApplication {
 
     /**
      * Select the Payment System Environment (PSE) directory.
-     * This is typically the first command sent to a payment card.
+     * This is typically the first command sent to a contact payment card.
      */
     async selectPse(): Promise<CardResponse> {
         const apdu = buildSelectApdu(PSE);
+        const response = await this.#transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Select the Proximity Payment System Environment (PPSE) directory.
+     * This is the first command sent to a contactless payment card.
+     */
+    async selectPpse(): Promise<CardResponse> {
+        const apdu = buildSelectApdu(PPSE);
         const response = await this.#transmit(apdu);
         return parseResponse(response);
     }
