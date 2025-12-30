@@ -403,6 +403,90 @@ function formatTrack1Dd(buffer: Buffer): string {
 }
 
 /**
+ * AIP (Application Interchange Profile) bit meanings
+ */
+const AIP_BYTE1_BITS: Array<[number, string]> = [
+    [0x40, 'SDA supported'],
+    [0x20, 'DDA supported'],
+    [0x10, 'Cardholder verification supported'],
+    [0x08, 'Terminal risk management to be performed'],
+    [0x04, 'Issuer authentication supported'],
+    [0x01, 'CDA supported'],
+];
+
+const AIP_BYTE2_BITS: Array<[number, string]> = [
+    [0x80, 'MSD supported'],
+    [0x40, 'EMV mode supported'],
+];
+
+/**
+ * Format GPO response (Response Message Template Format 1 or 2)
+ * Decodes AIP and AFL
+ */
+export function formatGpoResponse(buffer: Buffer): string {
+    const hex = buffer.toString('hex').toUpperCase();
+
+    // Check for Format 1 (tag 80) or Format 2 (tag 77)
+    if (buffer.length < 2) {
+        return hex;
+    }
+
+    const tag = buffer[0];
+    const len = buffer[1];
+
+    if (tag === 0x80 && len !== undefined && buffer.length >= len + 2) {
+        // Format 1: 80 len AIP(2) AFL(var)
+        const aip = buffer.subarray(2, 4);
+        const afl = buffer.subarray(4, 2 + len);
+        return formatGpoFormat1(hex, aip, afl);
+    } else if (tag === 0x77) {
+        // Format 2: 77 len [94 len AFL] [82 len AIP] ...
+        // Parse as TLV - for now just show hex
+        return `${hex}\n      ${DIM}(Response Template Format 2)${RESET}`;
+    }
+
+    return hex;
+}
+
+function formatGpoFormat1(hex: string, aip: Buffer, afl: Buffer): string {
+    const lines: string[] = [hex];
+
+    // Decode AIP
+    const aipHex = aip.toString('hex').toUpperCase();
+    const aipByte1 = aip[0] ?? 0;
+    const aipByte2 = aip[1] ?? 0;
+    const aipFeatures: string[] = [];
+
+    for (const [mask, name] of AIP_BYTE1_BITS) {
+        if (aipByte1 & mask) {
+            aipFeatures.push(name);
+        }
+    }
+    for (const [mask, name] of AIP_BYTE2_BITS) {
+        if (aipByte2 & mask) {
+            aipFeatures.push(name);
+        }
+    }
+
+    lines.push(`${DIM}AIP: ${aipHex}${aipFeatures.length > 0 ? ` (${aipFeatures.join(', ')})` : ''}${RESET}`);
+
+    // Decode AFL (4 bytes per entry)
+    if (afl.length >= 4) {
+        const aflEntries: string[] = [];
+        for (let i = 0; i + 3 < afl.length; i += 4) {
+            const sfi = (afl[i] ?? 0) >> 3;
+            const firstRec = afl[i + 1] ?? 0;
+            const lastRec = afl[i + 2] ?? 0;
+            const sdaRecs = afl[i + 3] ?? 0;
+            aflEntries.push(`SFI ${String(sfi)}: records ${String(firstRec)}-${String(lastRec)}${sdaRecs > 0 ? ` (${String(sdaRecs)} for SDA)` : ''}`);
+        }
+        lines.push(`${DIM}AFL: ${aflEntries.join(', ')}${RESET}`);
+    }
+
+    return lines.join('\n      ');
+}
+
+/**
  * Get custom formatter for a specific tag
  */
 function getTagFormatter(tagNum: number): ((buffer: Buffer) => string) | undefined {

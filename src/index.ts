@@ -1,4 +1,4 @@
 export { EmvApplication, createEmvApplication, default } from './emv-application.js';
-export { EMV_TAGS, format, findTag, findTagInBuffer, getTagName } from './emv-tags.js';
+export { EMV_TAGS, format, findTag, findTagInBuffer, getTagName, formatGpoResponse } from './emv-tags.js';
 export type { CardResponse, SmartCard, Reader } from './types.js';
 export type { Tlv } from '@tomkp/ber-tlv';

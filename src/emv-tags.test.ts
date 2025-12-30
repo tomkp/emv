@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EMV_TAGS, format, findTag, findTagInBuffer, getTagName } from './index.js';
+import { EMV_TAGS, format, findTag, findTagInBuffer, getTagName, formatGpoResponse } from './index.js';
 import type { CardResponse } from './types.js';
 
 function createMockResponse(buffer: Buffer): CardResponse {
@@ -285,5 +285,29 @@ describe('format', () => {
         const result = format(response);
         // Should contain green ANSI code for verification
         assert.ok(result.includes('\x1b[32m'), 'Should use green color for verification tags');
+    });
+});
+
+describe('formatGpoResponse', () => {
+    it('should decode GPO Format 1 response with AIP and AFL', () => {
+        // 80 0e 3c00 080101001001030018010201
+        // Tag 80, len 14, AIP=3C00, AFL=080101001001030018010201
+        const buffer = Buffer.from('800e3c00080101001001030018010201', 'hex');
+        const result = formatGpoResponse(buffer);
+
+        // Should contain raw hex
+        assert.ok(result.includes('800E3C00080101001001030018010201'), 'Should contain raw hex');
+        // Should decode AIP
+        assert.ok(result.includes('AIP: 3C00'), 'Should show AIP value');
+        assert.ok(result.includes('DDA supported'), 'Should decode AIP bits');
+        // Should decode AFL
+        assert.ok(result.includes('AFL:'), 'Should show AFL');
+        assert.ok(result.includes('SFI 1'), 'Should decode SFI');
+    });
+
+    it('should handle short buffer gracefully', () => {
+        const buffer = Buffer.from('80', 'hex');
+        const result = formatGpoResponse(buffer);
+        assert.strictEqual(result, '80');
     });
 });

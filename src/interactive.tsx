@@ -11,7 +11,7 @@ import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import Gradient from 'ink-gradient';
 import { EmvApplication } from './emv-application.js';
-import { format as formatTlv, findTagInBuffer } from './emv-tags.js';
+import { format as formatTlv, findTagInBuffer, formatGpoResponse } from './emv-tags.js';
 
 // ============================================================================
 // Types
@@ -621,7 +621,8 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                 case 'gpo': {
                     const response = await emv.getProcessingOptions();
                     if (response.isOk()) {
-                        setData([{ tag: 'GPO', name: 'GET_PROCESSING_OPTIONS', value: response.buffer.toString('hex') }]);
+                        const formatted = formatGpoResponse(response.buffer);
+                        setData([{ tag: 'GPO', name: 'GET_PROCESSING_OPTIONS', value: formatted }]);
                     } else {
                         setError(`GET PROCESSING OPTIONS failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
                     }
@@ -656,7 +657,7 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                     const response = await emv.getData(0x9f17);
                     if (response.isOk()) {
                         const tagValue = findTagInBuffer(response.buffer, 0x9f17);
-                        const count = tagValue && tagValue.length >= 1 ? tagValue[0] : undefined;
+                        const count = tagValue?.[0];
                         setData([{ tag: '9F17', name: 'PIN_TRY_COUNT', value: count !== undefined ? String(count) : 'Unknown' }]);
                     } else {
                         setError(`PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
