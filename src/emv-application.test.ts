@@ -759,6 +759,87 @@ describe('EmvApplication', () => {
         });
     });
 
+    describe('buildDefaultPdolData', async () => {
+        const { buildDefaultPdolData } = await import('./emv-application.js');
+
+        it('should build PDOL data with default values', () => {
+            const pdolEntries = [
+                { tag: 0x9f02, length: 6 },  // Amount
+                { tag: 0x5f2a, length: 2 },  // Currency
+                { tag: 0x9a, length: 3 },    // Transaction Date
+            ];
+
+            const result = buildDefaultPdolData(pdolEntries, {
+                amount: 1000,
+                currencyCode: 0x0840,
+            });
+
+            // Amount should be 000000001000 (1000 cents in BCD)
+            assert.strictEqual(result.subarray(0, 6).toString('hex'), '000000001000');
+            // Currency should be 0840 (USD)
+            assert.strictEqual(result.subarray(6, 8).toString('hex'), '0840');
+            // Date should be today's date (3 bytes)
+            assert.strictEqual(result.length, 11);
+        });
+
+        it('should allow custom overrides', () => {
+            const pdolEntries = [
+                { tag: 0x9f02, length: 6 },
+            ];
+
+            const customAmount = Buffer.from([0x00, 0x00, 0x00, 0x05, 0x00, 0x00]);
+            const result = buildDefaultPdolData(pdolEntries, {
+                amount: 1000,
+                currencyCode: 0x0840,
+                overrides: new Map([[0x9f02, customAmount]]),
+            });
+
+            assert.strictEqual(result.toString('hex'), '000000050000');
+        });
+
+        it('should use zeros for tags without defaults', () => {
+            const pdolEntries = [
+                { tag: 0x9f99, length: 4 },  // Unknown tag
+            ];
+
+            const result = buildDefaultPdolData(pdolEntries, {
+                amount: 1000,
+                currencyCode: 0x0840,
+            });
+
+            assert.strictEqual(result.toString('hex'), '00000000');
+        });
+    });
+
+    describe('buildDefaultCdolData', async () => {
+        const { buildDefaultCdolData } = await import('./emv-application.js');
+
+        it('should build CDOL data with common fields', () => {
+            const result = buildDefaultCdolData({
+                amount: 2500,
+                currencyCode: 0x0840,
+            });
+
+            // Should contain amount, other amount, country code, TVR, currency, date, type, unpredictable number
+            // 6 + 6 + 2 + 5 + 2 + 3 + 1 + 4 = 29 bytes
+            assert.strictEqual(result.length, 29);
+
+            // Amount should be first 6 bytes
+            assert.strictEqual(result.subarray(0, 6).toString('hex'), '000000002500');
+        });
+
+        it('should include transaction type', () => {
+            const result = buildDefaultCdolData({
+                amount: 1000,
+                currencyCode: 0x0840,
+                transactionType: 0x09,  // Cashback
+            });
+
+            // Transaction type is at offset 24 (after amount 6 + other 6 + country 2 + tvr 5 + currency 2 + date 3)
+            assert.strictEqual(result[24], 0x09);
+        });
+    });
+
     describe('performTransaction', () => {
         it('should orchestrate full transaction flow', async () => {
             // Set up mock responses for the transaction flow
