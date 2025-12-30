@@ -5,6 +5,8 @@
 
 Interactive EMV chip card explorer for PC/SC card readers. Discover payment applications, read card data, verify PINs, and explore EMV tag structures with a beautiful terminal UI.
 
+New to EMV? Read the [EMV Overview](docs/emv-overview.md) to understand how chip cards work.
+
 <img width="600" alt="CleanShot 2025-12-29 at 22 08 16@2x" src="https://github.com/user-attachments/assets/2a074179-69e5-4ad5-80d0-7497d82643df" />
 
 ## Features
