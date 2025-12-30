@@ -224,6 +224,14 @@ Tested with:
 - ACR122U (contactless)
 - Any PC/SC compatible reader
 
+## Related Packages
+
+If you're working with EMV or smartcard applications, these packages may be useful:
+
+- **[ber-tlv](https://github.com/tomkp/ber-tlv)** - BER-TLV encoding and decoding library. Useful if you need to work directly with TLV (Tag-Length-Value) structures, which are fundamental to EMV data encoding.
+
+- **[smartcard](https://github.com/tomkp/smartcard)** - PC/SC smartcard reader access for Node.js. This package provides the low-level communication layer for talking to smartcard readers, which this EMV library builds upon.
+
 ## License
 
 MIT
