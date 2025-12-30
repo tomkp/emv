@@ -655,7 +655,8 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                 case 'pincount': {
                     const response = await emv.getData(0x9f17);
                     if (response.isOk()) {
-                        const count = response.buffer[0];
+                        const tagValue = findTagInBuffer(response.buffer, 0x9f17);
+                        const count = tagValue?.[0];
                         setData([{ tag: '9F17', name: 'PIN_TRY_COUNT', value: count !== undefined ? String(count) : 'Unknown' }]);
                     } else {
                         setError(`PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
@@ -665,8 +666,9 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                 case 'atc': {
                     const response = await emv.getData(0x9f36);
                     if (response.isOk()) {
-                        const atcValue = response.buffer.readUInt16BE(0);
-                        setData([{ tag: '9F36', name: 'APP_TRANSACTION_COUNTER', value: String(atcValue) }]);
+                        const tagValue = findTagInBuffer(response.buffer, 0x9f36);
+                        const atcValue = tagValue && tagValue.length >= 2 ? tagValue.readUInt16BE(0) : undefined;
+                        setData([{ tag: '9F36', name: 'APP_TRANSACTION_COUNTER', value: atcValue !== undefined ? String(atcValue) : 'Unknown' }]);
                     } else {
                         setError(`ATC not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
                     }
