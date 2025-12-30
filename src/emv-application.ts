@@ -1,4 +1,63 @@
 import type { CardResponse, SmartCard, Reader } from './types.js';
+import { findTagInBuffer } from './emv-tags.js';
+
+/**
+ * AFL (Application File Locator) entry
+ */
+export interface AflEntry {
+    sfi: number;
+    firstRecord: number;
+    lastRecord: number;
+    sdaRecords: number;
+}
+
+/**
+ * PDOL/CDOL entry (tag + length)
+ */
+export interface DolEntry {
+    tag: number;
+    length: number;
+}
+
+/**
+ * Transaction options
+ */
+export interface TransactionOptions {
+    /** Amount in minor units (e.g., cents) */
+    amount: number;
+    /** ISO 4217 currency code (e.g., 0x0840 for USD) */
+    currencyCode: number;
+    /** Transaction type (0x00 = purchase, 0x01 = cash, 0x09 = cashback) */
+    transactionType?: number;
+    /** Cryptogram type to request: 'ARQC' (online), 'TC' (offline approve), 'AAC' (decline) */
+    cryptogramType?: 'ARQC' | 'TC' | 'AAC';
+    /** Additional tag values for PDOL */
+    pdolValues?: Map<number, Buffer>;
+    /** Additional tag values for CDOL */
+    cdolValues?: Map<number, Buffer>;
+}
+
+/**
+ * Transaction result
+ */
+export interface TransactionResult {
+    success: boolean;
+    error?: string | undefined;
+    /** AIP from GPO response */
+    aip?: Buffer | undefined;
+    /** AFL entries from GPO response */
+    afl?: AflEntry[] | undefined;
+    /** Records read from card */
+    records?: Buffer[] | undefined;
+    /** Cryptogram type returned by card */
+    cryptogramType?: 'ARQC' | 'TC' | 'AAC' | undefined;
+    /** Application cryptogram */
+    cryptogram?: Buffer | undefined;
+    /** Application Transaction Counter */
+    atc?: number | undefined;
+    /** Full Generate AC response */
+    generateAcResponse?: Buffer | undefined;
+}
 
 /**
  * Payment System Environment (PSE) identifier
@@ -112,6 +171,140 @@ function buildInternalAuthenticateApdu(authData: Buffer): Buffer {
         authData.length, // Lc
         ...authData,
         0x00, // Le: maximum response length
+    ]);
+}
+
+/**
+ * Parse AFL (Application File Locator) from buffer.
+ * Each AFL entry is 4 bytes: SFI (5 bits) | 000, first record, last record, SDA records
+ */
+export function parseAfl(buffer: Buffer): AflEntry[] {
+    const entries: AflEntry[] = [];
+    for (let i = 0; i + 3 < buffer.length; i += 4) {
+        const sfiByte = buffer[i];
+        const firstRecord = buffer[i + 1];
+        const lastRecord = buffer[i + 2];
+        const sdaRecords = buffer[i + 3];
+        if (sfiByte === undefined || firstRecord === undefined || lastRecord === undefined || sdaRecords === undefined) {
+            continue;
+        }
+        entries.push({
+            sfi: sfiByte >> 3,
+            firstRecord,
+            lastRecord,
+            sdaRecords,
+        });
+    }
+    return entries;
+}
+
+/**
+ * Parse PDOL or CDOL (Data Object List) from buffer.
+ * Format: tag (1-2 bytes) + length (1 byte), repeated
+ */
+export function parsePdol(buffer: Buffer): DolEntry[] {
+    const entries: DolEntry[] = [];
+    let i = 0;
+    while (i < buffer.length) {
+        const firstByte = buffer[i];
+        if (firstByte === undefined) break;
+
+        let tag: number;
+        // Check if it's a two-byte tag (first byte has bits 1-5 all set)
+        if ((firstByte & 0x1f) === 0x1f) {
+            const secondByte = buffer[i + 1];
+            if (secondByte === undefined) break;
+            tag = (firstByte << 8) | secondByte;
+            i += 2;
+        } else {
+            tag = firstByte;
+            i += 1;
+        }
+
+        const length = buffer[i];
+        if (length === undefined) break;
+        i += 1;
+
+        entries.push({ tag, length });
+    }
+    return entries;
+}
+
+/**
+ * Build PDOL/CDOL data from tag entries and values.
+ * Missing values are padded with zeros.
+ */
+export function buildPdolData(entries: DolEntry[], tagValues: Map<number, Buffer>): Buffer {
+    const chunks: Buffer[] = [];
+    for (const entry of entries) {
+        const value = tagValues.get(entry.tag);
+        if (value) {
+            if (value.length >= entry.length) {
+                chunks.push(value.subarray(0, entry.length));
+            } else {
+                // Pad with leading zeros if value is shorter
+                const padded = Buffer.alloc(entry.length);
+                value.copy(padded, entry.length - value.length);
+                chunks.push(padded);
+            }
+        } else {
+            // No value provided, use zeros
+            chunks.push(Buffer.alloc(entry.length));
+        }
+    }
+    return Buffer.concat(chunks);
+}
+
+/**
+ * Convert cryptogram type string to byte value
+ */
+function cryptogramTypeToByte(type: 'ARQC' | 'TC' | 'AAC'): number {
+    switch (type) {
+        case 'AAC': return 0x00;
+        case 'TC': return 0x40;
+        case 'ARQC': return 0x80;
+    }
+}
+
+/**
+ * Convert CID byte to cryptogram type string
+ */
+function byteToCryptogramType(cid: number): 'ARQC' | 'TC' | 'AAC' | undefined {
+    const type = cid & 0xc0;
+    switch (type) {
+        case 0x00: return 'AAC';
+        case 0x40: return 'TC';
+        case 0x80: return 'ARQC';
+        default: return undefined;
+    }
+}
+
+/**
+ * Convert amount to 6-byte BCD format (12 digits)
+ */
+function amountToBcd(amount: number): Buffer {
+    const str = amount.toString().padStart(12, '0');
+    const buf = Buffer.alloc(6);
+    for (let i = 0; i < 6; i++) {
+        const d1 = parseInt(str[i * 2] ?? '0', 10);
+        const d2 = parseInt(str[i * 2 + 1] ?? '0', 10);
+        buf[i] = (d1 << 4) | d2;
+    }
+    return buf;
+}
+
+/**
+ * Get current date as BCD YYMMDD
+ */
+function getCurrentDateBcd(): Buffer {
+    const now = new Date();
+    const year = (now.getFullYear() % 100).toString().padStart(2, '0');
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    return Buffer.from([
+        parseInt(year, 16),
+        parseInt(month, 16),
+        parseInt(day, 16),
     ]);
 }
 
@@ -333,6 +526,150 @@ export class EmvApplication {
      */
     getReaderName(): string {
         return this.#reader.name;
+    }
+
+    /**
+     * Perform a complete EMV transaction flow.
+     * This orchestrates: GPO → Read Records → Generate AC
+     *
+     * @param options - Transaction options including amount and currency
+     * @returns TransactionResult with cryptogram and card data
+     */
+    async performTransaction(options: TransactionOptions): Promise<TransactionResult> {
+        const {
+            amount,
+            currencyCode,
+            transactionType = 0x00,
+            cryptogramType = 'ARQC',
+            pdolValues = new Map(),
+            cdolValues = new Map(),
+        } = options;
+
+        // Build default tag values for PDOL
+        const defaultPdolValues = new Map<number, Buffer>([
+            [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
+            [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+            [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
+            [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
+            [0x9a, getCurrentDateBcd()],                                      // Transaction Date
+            [0x9c, Buffer.from([transactionType])],                           // Transaction Type
+            [0x9f37, Buffer.from([Math.random() * 256, Math.random() * 256, Math.random() * 256, Math.random() * 256].map(Math.floor))], // Unpredictable Number
+            [0x9f35, Buffer.from([0x22])],                                    // Terminal Type
+            [0x9f45, Buffer.alloc(2)],                                        // Data Authentication Code
+            [0x9f34, Buffer.from([0x00, 0x00, 0x00])],                         // CVM Results
+            [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])],                   // TTQ (Terminal Transaction Qualifiers)
+        ]);
+
+        // Merge with user-provided values
+        for (const [tag, value] of pdolValues) {
+            defaultPdolValues.set(tag, value);
+        }
+
+        // Step 1: GET PROCESSING OPTIONS
+        // For simplicity, we'll use empty PDOL data if card doesn't require specific data
+        const gpoResponse = await this.getProcessingOptions();
+
+        if (!gpoResponse.isOk()) {
+            return {
+                success: false,
+                error: `GPO failed with SW ${gpoResponse.sw1.toString(16).padStart(2, '0')}${gpoResponse.sw2.toString(16).padStart(2, '0')}`,
+            };
+        }
+
+        // Parse GPO response - Format 1 (tag 80) or Format 2 (tag 77)
+        let aip: Buffer | undefined;
+        let aflBuffer: Buffer | undefined;
+
+        const responseData = gpoResponse.buffer;
+        if (responseData[0] === 0x80) {
+            // Format 1: 80 len AIP(2) AFL(var)
+            const len = responseData[1];
+            if (len !== undefined && len >= 2) {
+                aip = responseData.subarray(2, 4);
+                aflBuffer = responseData.subarray(4, 2 + len);
+            }
+        } else if (responseData[0] === 0x77) {
+            // Format 2: look for tags 82 (AIP) and 94 (AFL)
+            aip = findTagInBuffer(responseData, 0x82);
+            aflBuffer = findTagInBuffer(responseData, 0x94);
+        }
+
+        const afl = aflBuffer ? parseAfl(aflBuffer) : [];
+
+        // Step 2: Read records from AFL
+        const records: Buffer[] = [];
+        for (const entry of afl) {
+            for (let rec = entry.firstRecord; rec <= entry.lastRecord; rec++) {
+                const recordResponse = await this.readRecord(entry.sfi, rec);
+                if (recordResponse.isOk()) {
+                    records.push(recordResponse.buffer);
+                }
+            }
+        }
+
+        // Step 3: Build CDOL data and Generate AC
+        // Use a minimal CDOL if we don't have the actual CDOL from the card
+        const defaultCdolValues = new Map<number, Buffer>([
+            [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
+            [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+            [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
+            [0x95, Buffer.alloc(5)],                                          // TVR
+            [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
+            [0x9a, getCurrentDateBcd()],                                      // Transaction Date
+            [0x9c, Buffer.from([transactionType])],                           // Transaction Type
+            [0x9f37, Buffer.from([Math.random() * 256, Math.random() * 256, Math.random() * 256, Math.random() * 256].map(Math.floor))], // Unpredictable Number
+            [0x82, aip ?? Buffer.alloc(2)],                                   // AIP
+            [0x9f36, Buffer.alloc(2)],                                        // ATC (placeholder)
+        ]);
+
+        // Merge with user-provided values
+        for (const [tag, value] of cdolValues) {
+            defaultCdolValues.set(tag, value);
+        }
+
+        // Build a minimal CDOL data buffer (common fields)
+        const cdolData = Buffer.concat([
+            defaultCdolValues.get(0x9f02) ?? Buffer.alloc(6),  // Amount
+            defaultCdolValues.get(0x9f03) ?? Buffer.alloc(6),  // Other Amount
+            defaultCdolValues.get(0x9f1a) ?? Buffer.alloc(2),  // Country Code
+            defaultCdolValues.get(0x95) ?? Buffer.alloc(5),    // TVR
+            defaultCdolValues.get(0x5f2a) ?? Buffer.alloc(2),  // Currency
+            defaultCdolValues.get(0x9a) ?? Buffer.alloc(3),    // Date
+            defaultCdolValues.get(0x9c) ?? Buffer.alloc(1),    // Type
+            defaultCdolValues.get(0x9f37) ?? Buffer.alloc(4),  // Unpredictable Number
+        ]);
+
+        const cryptogramByte = cryptogramTypeToByte(cryptogramType);
+        const acResponse = await this.generateAc(cryptogramByte, cdolData);
+
+        if (!acResponse.isOk()) {
+            return {
+                success: false,
+                error: `Generate AC failed with SW ${acResponse.sw1.toString(16).padStart(2, '0')}${acResponse.sw2.toString(16).padStart(2, '0')}`,
+                aip,
+                afl,
+                records,
+            };
+        }
+
+        // Parse Generate AC response
+        const cid = findTagInBuffer(acResponse.buffer, 0x9f27);
+        const cryptogram = findTagInBuffer(acResponse.buffer, 0x9f26);
+        const atcBuffer = findTagInBuffer(acResponse.buffer, 0x9f36);
+
+        const returnedCryptogramType = cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
+        const atc = atcBuffer && atcBuffer.length >= 2 ? atcBuffer.readUInt16BE(0) : undefined;
+
+        return {
+            success: true,
+            aip,
+            afl,
+            records,
+            cryptogramType: returnedCryptogramType,
+            cryptogram,
+            atc,
+            generateAcResponse: acResponse.buffer,
+        };
     }
 }
 

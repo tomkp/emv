@@ -536,4 +536,138 @@ describe('EmvApplication', () => {
             }
         });
     });
+
+    describe('parseAfl', async () => {
+        const { parseAfl } = await import('./emv-application.js');
+
+        it('should parse AFL entries from buffer', () => {
+            // AFL: SFI 1, records 1-3, 0 for SDA; SFI 2, records 1-1, 1 for SDA
+            const aflBuffer = Buffer.from([0x08, 0x01, 0x03, 0x00, 0x10, 0x01, 0x01, 0x01]);
+            const entries = parseAfl(aflBuffer);
+            assert.strictEqual(entries.length, 2);
+            assert.deepStrictEqual(entries[0], { sfi: 1, firstRecord: 1, lastRecord: 3, sdaRecords: 0 });
+            assert.deepStrictEqual(entries[1], { sfi: 2, firstRecord: 1, lastRecord: 1, sdaRecords: 1 });
+        });
+
+        it('should return empty array for empty buffer', () => {
+            const entries = parseAfl(Buffer.alloc(0));
+            assert.strictEqual(entries.length, 0);
+        });
+    });
+
+    describe('parsePdol', async () => {
+        const { parsePdol } = await import('./emv-application.js');
+
+        it('should parse PDOL tag-length pairs', () => {
+            // PDOL: 9F66 (4 bytes) + 9F02 (6 bytes) + 9F37 (4 bytes)
+            const pdolBuffer = Buffer.from([0x9f, 0x66, 0x04, 0x9f, 0x02, 0x06, 0x9f, 0x37, 0x04]);
+            const entries = parsePdol(pdolBuffer);
+            assert.strictEqual(entries.length, 3);
+            assert.deepStrictEqual(entries[0], { tag: 0x9f66, length: 4 });
+            assert.deepStrictEqual(entries[1], { tag: 0x9f02, length: 6 });
+            assert.deepStrictEqual(entries[2], { tag: 0x9f37, length: 4 });
+        });
+
+        it('should parse single-byte tags', () => {
+            // PDOL: 9A (3 bytes) - Transaction Date
+            const pdolBuffer = Buffer.from([0x9a, 0x03]);
+            const entries = parsePdol(pdolBuffer);
+            assert.strictEqual(entries.length, 1);
+            assert.deepStrictEqual(entries[0], { tag: 0x9a, length: 3 });
+        });
+    });
+
+    describe('buildPdolData', async () => {
+        const { buildPdolData } = await import('./emv-application.js');
+
+        it('should build PDOL data from tag values', () => {
+            const pdolEntries = [
+                { tag: 0x9f02, length: 6 },  // Amount
+                { tag: 0x5f2a, length: 2 },  // Currency
+            ];
+            const tagValues = new Map<number, Buffer>([
+                [0x9f02, Buffer.from([0x00, 0x00, 0x00, 0x00, 0x10, 0x00])],  // 10.00
+                [0x5f2a, Buffer.from([0x08, 0x26])],  // USD
+            ]);
+            const result = buildPdolData(pdolEntries, tagValues);
+            assert.strictEqual(result.toString('hex'), '000000001000' + '0826');
+        });
+
+        it('should pad with zeros for missing tag values', () => {
+            const pdolEntries = [
+                { tag: 0x9f02, length: 6 },
+            ];
+            const tagValues = new Map<number, Buffer>();
+            const result = buildPdolData(pdolEntries, tagValues);
+            assert.strictEqual(result.toString('hex'), '000000000000');
+        });
+
+        it('should truncate values that are too long', () => {
+            const pdolEntries = [
+                { tag: 0x9f02, length: 3 },
+            ];
+            const tagValues = new Map<number, Buffer>([
+                [0x9f02, Buffer.from([0x00, 0x00, 0x00, 0x00, 0x10, 0x00])],
+            ]);
+            const result = buildPdolData(pdolEntries, tagValues);
+            assert.strictEqual(result.length, 3);
+        });
+    });
+
+    describe('performTransaction', () => {
+        it('should orchestrate full transaction flow', async () => {
+            // Set up mock responses for the transaction flow
+            let callCount = 0;
+            mockCard.transmit = async () => {
+                callCount++;
+                if (callCount === 1) {
+                    // GPO response (Format 1): 80 len AIP(2) AFL(4)
+                    // AIP: 1C00, AFL: SFI 1 (0x08) records 1-1
+                    return Buffer.from([0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00]);
+                } else if (callCount === 2) {
+                    // Read record response - proper TLV structure
+                    // 70 len [5A len PAN]
+                    return Buffer.from([0x70, 0x0a, 0x5a, 0x08, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x90, 0x00]);
+                } else if (callCount === 3) {
+                    // Generate AC response with cryptogram - proper TLV structure
+                    // 9F27 (4 bytes: 2-byte tag + 1-byte len + 1-byte value) = 4
+                    // 9F36 (5 bytes: 2-byte tag + 1-byte len + 2-byte value) = 5
+                    // 9F26 (11 bytes: 2-byte tag + 1-byte len + 8-byte value) = 11
+                    // Total = 20 bytes = 0x14
+                    return Buffer.from([
+                        0x77, 0x14,  // 20 bytes
+                        0x9f, 0x27, 0x01, 0x80,  // CID: ARQC (4 bytes)
+                        0x9f, 0x36, 0x02, 0x00, 0x01,  // ATC: 1 (5 bytes)
+                        0x9f, 0x26, 0x08, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,  // Cryptogram (11 bytes)
+                        0x90, 0x00  // SW
+                    ]);
+                }
+                return Buffer.from([0x90, 0x00]);
+            };
+
+            const result = await emv.performTransaction({
+                amount: 1000,
+                currencyCode: 0x0840,
+                transactionType: 0x00,
+            });
+
+            assert.ok(result);
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.cryptogramType, 'ARQC');
+            assert.ok(result.cryptogram);
+            assert.strictEqual(result.atc, 1);
+        });
+
+        it('should handle GPO failure', async () => {
+            mockCard.transmit = async () => Buffer.from([0x69, 0x85]);  // Conditions not satisfied
+
+            const result = await emv.performTransaction({
+                amount: 1000,
+                currencyCode: 0x0840,
+            });
+
+            assert.strictEqual(result.success, false);
+            assert.ok(result.error);
+        });
+    });
 });
