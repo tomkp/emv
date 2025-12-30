@@ -60,6 +60,18 @@ export interface TransactionResult {
 }
 
 /**
+ * Record read from card with metadata
+ */
+export interface RecordData {
+    /** Short File Identifier */
+    sfi: number;
+    /** Record number */
+    recordNumber: number;
+    /** Raw record data */
+    data: Buffer;
+}
+
+/**
  * Payment System Environment (PSE) identifier
  * "1PAY.SYS.DDF01" encoded as bytes
  */
@@ -444,6 +456,34 @@ export class EmvApplication {
         const apdu = buildReadRecordApdu(sfi, record);
         const response = await this.#transmit(apdu);
         return parseResponse(response);
+    }
+
+    /**
+     * Read all records specified in the Application File Locator (AFL).
+     * This automates the process of reading all card data after GPO.
+     *
+     * @param afl - AFL entries (from parseAfl) or raw AFL buffer
+     * @returns Array of records with SFI and record number metadata
+     */
+    async readAllRecords(afl: AflEntry[] | Buffer): Promise<RecordData[]> {
+        const entries = Buffer.isBuffer(afl) ? parseAfl(afl) : afl;
+        const records: RecordData[] = [];
+
+        for (const entry of entries) {
+            for (let recordNum = entry.firstRecord; recordNum <= entry.lastRecord; recordNum++) {
+                const response = await this.readRecord(entry.sfi, recordNum);
+                if (response.isOk()) {
+                    records.push({
+                        sfi: entry.sfi,
+                        recordNumber: recordNum,
+                        data: response.buffer,
+                    });
+                }
+                // Skip failed records silently - they may not exist on all cards
+            }
+        }
+
+        return records;
     }
 
     /**
