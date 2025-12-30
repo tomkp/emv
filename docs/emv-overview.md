@@ -204,7 +204,7 @@ P2:  80 (plaintext PIN)
 Data: PIN block
 ```
 
-The PIN block format: `2x yyyy yyyy FF FF FF FF FF` where x is PIN length and y is each PIN digit.
+The PIN block format: `2x yyyy yyyy FF FF FF FF FF` where x is the PIN length and each y is a PIN digit (0-9).
 
 ### GET PROCESSING OPTIONS
 
