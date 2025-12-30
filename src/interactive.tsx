@@ -656,7 +656,7 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                     const response = await emv.getData(0x9f17);
                     if (response.isOk()) {
                         const tagValue = findTagInBuffer(response.buffer, 0x9f17);
-                        const count = tagValue?.[0];
+                        const count = tagValue && tagValue.length >= 1 ? tagValue[0] : undefined;
                         setData([{ tag: '9F17', name: 'PIN_TRY_COUNT', value: count !== undefined ? String(count) : 'Unknown' }]);
                     } else {
                         setError(`PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
