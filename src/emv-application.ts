@@ -541,8 +541,8 @@ export class EmvApplication {
             currencyCode,
             transactionType = 0x00,
             cryptogramType = 'ARQC',
-            pdolValues = new Map(),
-            cdolValues = new Map(),
+            pdolValues = new Map<number, Buffer>(),
+            cdolValues = new Map<number, Buffer>(),
         } = options;
 
         // Build default tag values for PDOL
@@ -561,9 +561,9 @@ export class EmvApplication {
         ]);
 
         // Merge with user-provided values
-        for (const [tag, value] of pdolValues) {
+        pdolValues.forEach((value, tag) => {
             defaultPdolValues.set(tag, value);
-        }
+        });
 
         // Step 1: GET PROCESSING OPTIONS
         // For simplicity, we'll use empty PDOL data if card doesn't require specific data
@@ -623,9 +623,9 @@ export class EmvApplication {
         ]);
 
         // Merge with user-provided values
-        for (const [tag, value] of cdolValues) {
+        cdolValues.forEach((value, tag) => {
             defaultCdolValues.set(tag, value);
-        }
+        });
 
         // Build a minimal CDOL data buffer (common fields)
         const cdolData = Buffer.concat([
