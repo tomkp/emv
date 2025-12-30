@@ -72,6 +72,36 @@ export interface RecordData {
 }
 
 /**
+ * Options for building default PDOL data
+ */
+export interface PdolBuildOptions {
+    /** Amount in minor units (e.g., cents) */
+    amount: number;
+    /** ISO 4217 currency code (e.g., 0x0840 for USD) */
+    currencyCode: number;
+    /** Transaction type (default 0x00 = purchase) */
+    transactionType?: number;
+    /** Custom tag value overrides */
+    overrides?: Map<number, Buffer>;
+}
+
+/**
+ * Options for building default CDOL data
+ */
+export interface CdolBuildOptions {
+    /** Amount in minor units (e.g., cents) */
+    amount: number;
+    /** ISO 4217 currency code (e.g., 0x0840 for USD) */
+    currencyCode: number;
+    /** Transaction type (default 0x00 = purchase) */
+    transactionType?: number;
+    /** Terminal Verification Results (default all zeros) */
+    tvr?: Buffer;
+    /** Custom tag value overrides */
+    overrides?: Map<number, Buffer>;
+}
+
+/**
  * Payment System Environment (PSE) identifier
  * "1PAY.SYS.DDF01" encoded as bytes
  */
@@ -265,6 +295,99 @@ export function buildPdolData(entries: DolEntry[], tagValues: Map<number, Buffer
         }
     }
     return Buffer.concat(chunks);
+}
+
+/**
+ * Generate a random unpredictable number (4 bytes)
+ */
+function generateUnpredictableNumber(): Buffer {
+    return Buffer.from([
+        Math.floor(Math.random() * 256),
+        Math.floor(Math.random() * 256),
+        Math.floor(Math.random() * 256),
+        Math.floor(Math.random() * 256),
+    ]);
+}
+
+/**
+ * Build PDOL data with sensible default values for common EMV tags.
+ * Use this when you need to construct PDOL data for GPO but don't have
+ * all the specific terminal values.
+ *
+ * @param entries - PDOL entries from parsePdol()
+ * @param options - Transaction options (amount, currency, etc.)
+ * @returns Buffer containing PDOL data ready for GPO
+ */
+export function buildDefaultPdolData(entries: DolEntry[], options: PdolBuildOptions): Buffer {
+    const { amount, currencyCode, transactionType = 0x00, overrides = new Map<number, Buffer>() } = options;
+
+    // Build default values for common PDOL tags
+    const defaults = new Map<number, Buffer>([
+        [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
+        [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+        [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
+        [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
+        [0x9a, getCurrentDateBcd()],                                      // Transaction Date
+        [0x9c, Buffer.from([transactionType])],                           // Transaction Type
+        [0x9f37, generateUnpredictableNumber()],                          // Unpredictable Number
+        [0x9f35, Buffer.from([0x22])],                                    // Terminal Type
+        [0x9f45, Buffer.alloc(2)],                                        // Data Authentication Code
+        [0x9f34, Buffer.from([0x00, 0x00, 0x00])],                         // CVM Results
+        [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])],                   // TTQ (Terminal Transaction Qualifiers)
+    ]);
+
+    // Merge user overrides
+    overrides.forEach((value, tag) => {
+        defaults.set(tag, value);
+    });
+
+    return buildPdolData(entries, defaults);
+}
+
+/**
+ * Build standard CDOL data for Generate AC command.
+ * This constructs the commonly required CDOL1 data in the standard order.
+ *
+ * @param options - Transaction options (amount, currency, etc.)
+ * @returns Buffer containing CDOL data ready for Generate AC
+ */
+export function buildDefaultCdolData(options: CdolBuildOptions): Buffer {
+    const {
+        amount,
+        currencyCode,
+        transactionType = 0x00,
+        tvr = Buffer.alloc(5),
+        overrides = new Map<number, Buffer>(),
+    } = options;
+
+    // Standard CDOL1 fields in typical order
+    const defaults = new Map<number, Buffer>([
+        [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized (6 bytes)
+        [0x9f03, Buffer.alloc(6)],                                        // Amount, Other (6 bytes)
+        [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code (2 bytes)
+        [0x95, tvr],                                                      // TVR (5 bytes)
+        [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code (2 bytes)
+        [0x9a, getCurrentDateBcd()],                                      // Transaction Date (3 bytes)
+        [0x9c, Buffer.from([transactionType])],                           // Transaction Type (1 byte)
+        [0x9f37, generateUnpredictableNumber()],                          // Unpredictable Number (4 bytes)
+    ]);
+
+    // Merge user overrides
+    overrides.forEach((value, tag) => {
+        defaults.set(tag, value);
+    });
+
+    // Build in standard CDOL1 order
+    return Buffer.concat([
+        defaults.get(0x9f02) ?? Buffer.alloc(6),  // Amount
+        defaults.get(0x9f03) ?? Buffer.alloc(6),  // Other Amount
+        defaults.get(0x9f1a) ?? Buffer.alloc(2),  // Country Code
+        defaults.get(0x95) ?? Buffer.alloc(5),    // TVR
+        defaults.get(0x5f2a) ?? Buffer.alloc(2),  // Currency
+        defaults.get(0x9a) ?? Buffer.alloc(3),    // Date
+        defaults.get(0x9c) ?? Buffer.alloc(1),    // Type
+        defaults.get(0x9f37) ?? Buffer.alloc(4),  // Unpredictable Number
+    ]);
 }
 
 /**
