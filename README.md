@@ -3,16 +3,34 @@
 [![CI](https://github.com/tomkp/emv/actions/workflows/ci.yml/badge.svg)](https://github.com/tomkp/emv/actions/workflows/ci.yml)
 [![npm version](https://badge.fury.io/js/emv.svg)](https://www.npmjs.com/package/emv)
 
-EMV / Chip and PIN library for PC/SC card readers.
+Interactive EMV chip card explorer for PC/SC card readers. Discover payment applications, read card data, verify PINs, and explore EMV tag structures with a beautiful terminal UI.
 
 <img width="600" alt="CleanShot 2025-12-29 at 22 08 16@2x" src="https://github.com/user-attachments/assets/2a074179-69e5-4ad5-80d0-7497d82643df" />
 
+## Features
+
+- Interactive terminal UI with keyboard navigation
+- Auto-detect card readers and inserted cards
+- Discover payment applications on EMV cards
+- Read and decode EMV tag structures
+- PIN verification (plaintext - for test cards only)
+- View transaction counters and card data
 
 ## Installation
 
 ```bash
-npm install emv
+npm install -g emv
 ```
+
+## Quick Start
+
+Run the interactive explorer:
+
+```bash
+emv
+```
+
+Use arrow keys to navigate, Enter to select, and `q` to quit.
 
 **Requirements:**
 
@@ -28,7 +46,9 @@ sudo systemctl start pcscd
 
 **macOS/Windows:** No additional setup required.
 
-## Usage
+## Programmatic API
+
+The library can also be used programmatically:
 
 ```typescript
 import { Devices } from 'smartcard';
