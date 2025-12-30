@@ -640,6 +640,66 @@ describe('EmvApplication', () => {
         });
     });
 
+    describe('readAllRecords', () => {
+        it('should read all records from AFL entries', async () => {
+            let recordNum = 0;
+            mockCard.transmit = async () => {
+                recordNum++;
+                // Return different data for each record
+                return Buffer.from([0x70, 0x04, 0x5a, 0x02, recordNum, recordNum, 0x90, 0x00]);
+            };
+
+            const aflEntries = [
+                { sfi: 1, firstRecord: 1, lastRecord: 2, sdaRecords: 0 },
+                { sfi: 2, firstRecord: 1, lastRecord: 1, sdaRecords: 0 },
+            ];
+
+            const records = await emv.readAllRecords(aflEntries);
+            assert.strictEqual(records.length, 3);
+            assert.strictEqual(records[0]?.sfi, 1);
+            assert.strictEqual(records[0]?.recordNumber, 1);
+            assert.strictEqual(records[1]?.sfi, 1);
+            assert.strictEqual(records[1]?.recordNumber, 2);
+            assert.strictEqual(records[2]?.sfi, 2);
+            assert.strictEqual(records[2]?.recordNumber, 1);
+        });
+
+        it('should accept raw AFL buffer', async () => {
+            mockCard.transmit = async () => Buffer.from([0x70, 0x02, 0x5a, 0x00, 0x90, 0x00]);
+
+            // SFI 1, records 1-1
+            const aflBuffer = Buffer.from([0x08, 0x01, 0x01, 0x00]);
+            const records = await emv.readAllRecords(aflBuffer);
+            assert.strictEqual(records.length, 1);
+            assert.strictEqual(records[0]?.sfi, 1);
+        });
+
+        it('should skip failed records', async () => {
+            let callCount = 0;
+            mockCard.transmit = async () => {
+                callCount++;
+                if (callCount === 2) {
+                    // Second record fails
+                    return Buffer.from([0x6a, 0x83]);
+                }
+                return Buffer.from([0x70, 0x02, 0x5a, 0x00, 0x90, 0x00]);
+            };
+
+            const aflEntries = [
+                { sfi: 1, firstRecord: 1, lastRecord: 3, sdaRecords: 0 },
+            ];
+
+            const records = await emv.readAllRecords(aflEntries);
+            // Should have 2 records (first and third), second failed
+            assert.strictEqual(records.length, 2);
+        });
+
+        it('should return empty array for empty AFL', async () => {
+            const records = await emv.readAllRecords([]);
+            assert.strictEqual(records.length, 0);
+        });
+    });
+
     describe('parsePdol', async () => {
         const { parsePdol } = await import('./emv-application.js');
 
