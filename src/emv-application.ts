@@ -309,10 +309,9 @@ function getCurrentDateBcd(): Buffer {
 }
 
 /**
- * Build VERIFY PIN APDU command
- * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
+ * Build PIN block in ISO 9564 Format 2 (BCD with 0xF padding)
  */
-function buildVerifyPinApdu(pin: string): Buffer {
+function buildPinBlock(pin: string): Buffer {
     const pinLength = pin.length;
     const pinBlock = Buffer.alloc(8);
 
@@ -328,6 +327,16 @@ function buildVerifyPinApdu(pin: string): Buffer {
         pinBlock[i + 1] = (digit1 << 4) | digit2;
     }
 
+    return pinBlock;
+}
+
+/**
+ * Build VERIFY PIN APDU command
+ * PIN is encoded in ISO 9564 Format 2 (BCD with 0xF padding)
+ */
+function buildVerifyPinApdu(pin: string): Buffer {
+    const pinBlock = buildPinBlock(pin);
+
     return Buffer.from([
         0x00, // CLA
         0x20, // INS: VERIFY
@@ -335,6 +344,25 @@ function buildVerifyPinApdu(pin: string): Buffer {
         0x80, // P2: plaintext PIN
         0x08, // Lc: PIN block is always 8 bytes
         ...pinBlock,
+    ]);
+}
+
+/**
+ * Build CHANGE REFERENCE DATA APDU command for PIN change
+ * Both old and new PINs are encoded in ISO 9564 Format 2
+ */
+function buildChangePinApdu(oldPin: string, newPin: string): Buffer {
+    const oldPinBlock = buildPinBlock(oldPin);
+    const newPinBlock = buildPinBlock(newPin);
+
+    return Buffer.from([
+        0x00, // CLA
+        0x24, // INS: CHANGE REFERENCE DATA
+        0x00, // P1
+        0x80, // P2: plaintext PIN
+        0x10, // Lc: 16 bytes (2 x 8-byte PIN blocks)
+        ...oldPinBlock,
+        ...newPinBlock,
     ]);
 }
 
@@ -433,6 +461,33 @@ export class EmvApplication {
         }
 
         const apdu = buildVerifyPinApdu(pin);
+        const response = await this.#transmit(apdu);
+        return parseResponse(response);
+    }
+
+    /**
+     * Change the cardholder PIN (plaintext).
+     *
+     * **Note:** Most payment cards restrict PIN change to specific environments
+     * (ATM, bank terminal). This method is primarily useful for test cards.
+     *
+     * @param oldPin - Current PIN code as a string of 4-12 digits
+     * @param newPin - New PIN code as a string of 4-12 digits
+     * @returns CardResponse with status words indicating success or failure:
+     *   - SW 9000: PIN changed successfully
+     *   - SW 63CX: Wrong old PIN, X attempts remaining
+     *   - SW 6983: PIN blocked (too many failed attempts)
+     *   - SW 6984: PIN not initialized
+     */
+    async changePin(oldPin: string, newPin: string): Promise<CardResponse> {
+        if (!/^\d{4,12}$/.test(oldPin)) {
+            throw new RangeError('Old PIN must be a string of 4-12 digits');
+        }
+        if (!/^\d{4,12}$/.test(newPin)) {
+            throw new RangeError('New PIN must be a string of 4-12 digits');
+        }
+
+        const apdu = buildChangePinApdu(oldPin, newPin);
         const response = await this.#transmit(apdu);
         return parseResponse(response);
     }

@@ -266,6 +266,91 @@ describe('EmvApplication', () => {
         });
     });
 
+    describe('changePin', () => {
+        it('should throw RangeError for old PIN shorter than 4 digits', async () => {
+            await assert.rejects(
+                () => emv.changePin('123', '1234'),
+                /Old PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should throw RangeError for new PIN shorter than 4 digits', async () => {
+            await assert.rejects(
+                () => emv.changePin('1234', '12'),
+                /New PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should throw RangeError for non-numeric old PIN', async () => {
+            await assert.rejects(
+                () => emv.changePin('12ab', '1234'),
+                /Old PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should throw RangeError for non-numeric new PIN', async () => {
+            await assert.rejects(
+                () => emv.changePin('1234', 'abcd'),
+                /New PIN must be a string of 4-12 digits/
+            );
+        });
+
+        it('should transmit CHANGE REFERENCE DATA APDU with correct format', async () => {
+            await emv.changePin('1234', '5678');
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x00); // CLA
+            assert.strictEqual(apdu[1], 0x24); // INS: CHANGE REFERENCE DATA
+            assert.strictEqual(apdu[2], 0x00); // P1
+            assert.strictEqual(apdu[3], 0x80); // P2: plaintext PIN
+            assert.strictEqual(apdu[4], 0x10); // Lc: 16 bytes (2 x 8-byte PIN blocks)
+        });
+
+        it('should encode old and new PINs correctly in BCD format', async () => {
+            await emv.changePin('1234', '5678');
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+
+            // Old PIN block: 0x24 (length=4) + 0x12 0x34 0xFF 0xFF 0xFF 0xFF 0xFF
+            assert.strictEqual(apdu[5], 0x24); // 0x20 | 4
+            assert.strictEqual(apdu[6], 0x12);
+            assert.strictEqual(apdu[7], 0x34);
+            assert.strictEqual(apdu[8], 0xff);
+
+            // New PIN block: 0x24 (length=4) + 0x56 0x78 0xFF 0xFF 0xFF 0xFF 0xFF
+            assert.strictEqual(apdu[13], 0x24); // 0x20 | 4
+            assert.strictEqual(apdu[14], 0x56);
+            assert.strictEqual(apdu[15], 0x78);
+            assert.strictEqual(apdu[16], 0xff);
+        });
+
+        it('should return success for PIN change', async () => {
+            mockCard.transmit = async () => Buffer.from([0x90, 0x00]);
+            const response = await emv.changePin('1234', '5678');
+            assert.strictEqual(response.isOk(), true);
+        });
+
+        it('should return wrong PIN status with remaining attempts', async () => {
+            // 63C2 = wrong PIN, 2 attempts remaining
+            mockCard.transmit = async () => Buffer.from([0x63, 0xc2]);
+            const response = await emv.changePin('0000', '1234');
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x63);
+            assert.strictEqual(response.sw2, 0xc2);
+        });
+
+        it('should return PIN blocked status', async () => {
+            // 6983 = PIN blocked
+            mockCard.transmit = async () => Buffer.from([0x69, 0x83]);
+            const response = await emv.changePin('0000', '1234');
+            assert.strictEqual(response.isOk(), false);
+            assert.strictEqual(response.sw1, 0x69);
+            assert.strictEqual(response.sw2, 0x83);
+        });
+    });
+
     describe('getData', () => {
         it('should throw RangeError for tag less than 0', async () => {
             await assert.rejects(
