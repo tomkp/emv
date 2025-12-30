@@ -896,4 +896,104 @@ describe('EmvApplication', () => {
             assert.ok(result.error);
         });
     });
+
+    describe('parseCvmList', async () => {
+        const { parseCvmList } = await import('./emv-application.js');
+
+        it('should parse CVM list with amount thresholds', () => {
+            // CVM List: X=1000, Y=5000, then rules
+            const buffer = Buffer.from([
+                0x00, 0x00, 0x03, 0xe8,  // X = 1000
+                0x00, 0x00, 0x13, 0x88,  // Y = 5000
+                0x02, 0x03,              // Enciphered PIN online, if terminal supports CVM
+                0x1e, 0x03,              // Signature, if terminal supports CVM
+                0x1f, 0x00,              // No CVM, always
+            ]);
+            const result = parseCvmList(buffer);
+
+            assert.strictEqual(result.amountX, 1000);
+            assert.strictEqual(result.amountY, 5000);
+            assert.strictEqual(result.rules.length, 3);
+
+            assert.strictEqual(result.rules[0]?.method, 'enciphered_pin_online');
+            assert.strictEqual(result.rules[0]?.condition, 'terminal_supports_cvm');
+            assert.strictEqual(result.rules[0]?.failIfUnsuccessful, true);
+
+            assert.strictEqual(result.rules[1]?.method, 'signature');
+            assert.strictEqual(result.rules[2]?.method, 'no_cvm');
+        });
+
+        it('should handle continue-on-fail flag', () => {
+            const buffer = Buffer.from([
+                0x00, 0x00, 0x00, 0x00,  // X = 0
+                0x00, 0x00, 0x00, 0x00,  // Y = 0
+                0x42, 0x00,              // Enciphered PIN online + continue if fails, always
+            ]);
+            const result = parseCvmList(buffer);
+
+            assert.strictEqual(result.rules[0]?.failIfUnsuccessful, false);
+        });
+
+        it('should return empty rules for buffer too short', () => {
+            const buffer = Buffer.from([0x00, 0x00, 0x00, 0x00]);
+            const result = parseCvmList(buffer);
+            assert.strictEqual(result.rules.length, 0);
+        });
+    });
+
+    describe('evaluateCvm', async () => {
+        const { parseCvmList, evaluateCvm } = await import('./emv-application.js');
+
+        it('should select first matching rule', () => {
+            const cvmList = parseCvmList(Buffer.from([
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x02, 0x03,  // Enciphered PIN, if terminal supports
+                0x1e, 0x03,  // Signature, if terminal supports
+            ]));
+
+            const result = evaluateCvm(cvmList, { terminalSupportsCvm: true });
+            assert.strictEqual(result?.method, 'enciphered_pin_online');
+        });
+
+        it('should skip rules where condition not met', () => {
+            const cvmList = parseCvmList(Buffer.from([
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x02, 0x03,  // Enciphered PIN, if terminal supports
+                0x1f, 0x00,  // No CVM, always
+            ]));
+
+            const result = evaluateCvm(cvmList, { terminalSupportsCvm: false });
+            assert.strictEqual(result?.method, 'no_cvm');
+        });
+
+        it('should handle amount threshold conditions', () => {
+            const cvmList = parseCvmList(Buffer.from([
+                0x00, 0x00, 0x03, 0xe8,  // X = 1000
+                0x00, 0x00, 0x00, 0x00,  // Y = 0
+                0x02, 0x07,  // Enciphered PIN, if amount > X
+                0x1f, 0x00,  // No CVM, always
+            ]));
+
+            // Amount 500 is under X (1000), so PIN rule doesn't apply
+            const result1 = evaluateCvm(cvmList, { amount: 500 });
+            assert.strictEqual(result1?.method, 'no_cvm');
+
+            // Amount 1500 is over X, so PIN rule applies
+            const result2 = evaluateCvm(cvmList, { amount: 1500 });
+            assert.strictEqual(result2?.method, 'enciphered_pin_online');
+        });
+
+        it('should return undefined if no rules match', () => {
+            const cvmList = parseCvmList(Buffer.from([
+                0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00,
+                0x02, 0x03,  // Enciphered PIN, if terminal supports
+            ]));
+
+            const result = evaluateCvm(cvmList, { terminalSupportsCvm: false });
+            assert.strictEqual(result, undefined);
+        });
+    });
 });

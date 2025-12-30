@@ -102,6 +102,80 @@ export interface CdolBuildOptions {
 }
 
 /**
+ * CVM (Cardholder Verification Method) method types
+ */
+export type CvmMethod =
+    | 'fail'
+    | 'plaintext_pin_icc'
+    | 'enciphered_pin_online'
+    | 'plaintext_pin_icc_signature'
+    | 'enciphered_pin_icc'
+    | 'enciphered_pin_icc_signature'
+    | 'signature'
+    | 'no_cvm'
+    | 'unknown';
+
+/**
+ * CVM condition types
+ */
+export type CvmCondition =
+    | 'always'
+    | 'unattended_cash'
+    | 'not_unattended_cash_manual_pin'
+    | 'terminal_supports_cvm'
+    | 'manual_cash'
+    | 'purchase_with_cashback'
+    | 'amount_under_x'
+    | 'amount_over_x'
+    | 'amount_under_y'
+    | 'amount_over_y'
+    | 'unknown';
+
+/**
+ * A single CVM rule
+ */
+export interface CvmRule {
+    /** The verification method */
+    method: CvmMethod;
+    /** The condition for this rule to apply */
+    condition: CvmCondition;
+    /** If true, transaction fails if this CVM fails. If false, try next rule. */
+    failIfUnsuccessful: boolean;
+    /** Raw CVM byte */
+    cvmByte: number;
+    /** Raw condition byte */
+    conditionByte: number;
+}
+
+/**
+ * Parsed CVM list
+ */
+export interface CvmList {
+    /** Amount X threshold (in currency minor units) */
+    amountX: number;
+    /** Amount Y threshold (in currency minor units) */
+    amountY: number;
+    /** CVM rules in priority order */
+    rules: CvmRule[];
+}
+
+/**
+ * Context for CVM evaluation
+ */
+export interface CvmContext {
+    /** Transaction amount in minor units */
+    amount?: number;
+    /** Whether terminal supports CVM */
+    terminalSupportsCvm?: boolean;
+    /** Whether this is unattended cash */
+    unattendedCash?: boolean;
+    /** Whether this is manual cash */
+    manualCash?: boolean;
+    /** Whether this is purchase with cashback */
+    purchaseWithCashback?: boolean;
+}
+
+/**
  * Payment System Environment (PSE) identifier
  * "1PAY.SYS.DDF01" encoded as bytes
  */
@@ -388,6 +462,149 @@ export function buildDefaultCdolData(options: CdolBuildOptions): Buffer {
         defaults.get(0x9c) ?? Buffer.alloc(1),    // Type
         defaults.get(0x9f37) ?? Buffer.alloc(4),  // Unpredictable Number
     ]);
+}
+
+/**
+ * Parse CVM (Cardholder Verification Method) List from EMV tag 8E.
+ * The CVM List contains amount thresholds and a list of verification rules.
+ *
+ * @param buffer - The CVM List data (tag 8E)
+ * @returns Parsed CVM list with amount thresholds and rules
+ */
+export function parseCvmList(buffer: Buffer): CvmList {
+    // CVM List structure:
+    // Bytes 0-3: Amount X (4 bytes, big-endian)
+    // Bytes 4-7: Amount Y (4 bytes, big-endian)
+    // Bytes 8+: CVM rules (2 bytes each)
+
+    if (buffer.length < 8) {
+        return { amountX: 0, amountY: 0, rules: [] };
+    }
+
+    const amountX = buffer.readUInt32BE(0);
+    const amountY = buffer.readUInt32BE(4);
+    const rules: CvmRule[] = [];
+
+    // Parse CVM rules (2 bytes each)
+    for (let i = 8; i + 1 < buffer.length; i += 2) {
+        const cvmByte = buffer[i] as number;
+        const conditionByte = buffer[i + 1] as number;
+
+        // Bit 6 of CVM byte indicates fail behavior (0 = fail, 1 = continue)
+        const failIfUnsuccessful = (cvmByte & 0x40) === 0;
+
+        // Bits 0-5 of CVM byte indicate the method
+        const methodCode = cvmByte & 0x3f;
+        const method = cvmCodeToMethod(methodCode);
+
+        const condition = conditionByteToCondition(conditionByte);
+
+        rules.push({
+            method,
+            condition,
+            failIfUnsuccessful,
+            cvmByte,
+            conditionByte,
+        });
+    }
+
+    return { amountX, amountY, rules };
+}
+
+/**
+ * Convert CVM method code to CvmMethod type
+ */
+function cvmCodeToMethod(code: number): CvmMethod {
+    switch (code) {
+        case 0x00: return 'fail';
+        case 0x01: return 'plaintext_pin_icc';
+        case 0x02: return 'enciphered_pin_online';
+        case 0x03: return 'plaintext_pin_icc_signature';
+        case 0x04: return 'enciphered_pin_icc';
+        case 0x05: return 'enciphered_pin_icc_signature';
+        case 0x1e: return 'signature';
+        case 0x1f: return 'no_cvm';
+        default: return 'unknown';
+    }
+}
+
+/**
+ * Convert condition byte to CvmCondition type
+ */
+function conditionByteToCondition(code: number): CvmCondition {
+    switch (code) {
+        case 0x00: return 'always';
+        case 0x01: return 'unattended_cash';
+        case 0x02: return 'not_unattended_cash_manual_pin';
+        case 0x03: return 'terminal_supports_cvm';
+        case 0x04: return 'manual_cash';
+        case 0x05: return 'purchase_with_cashback';
+        case 0x06: return 'amount_under_x';
+        case 0x07: return 'amount_over_x';
+        case 0x08: return 'amount_under_y';
+        case 0x09: return 'amount_over_y';
+        default: return 'unknown';
+    }
+}
+
+/**
+ * Evaluate CVM rules against a transaction context and return the first matching rule.
+ * This simulates the terminal's CVM selection process.
+ *
+ * @param cvmList - Parsed CVM list
+ * @param context - Transaction context with relevant conditions
+ * @returns The first matching CVM rule, or undefined if none match
+ */
+export function evaluateCvm(cvmList: CvmList, context: CvmContext): CvmRule | undefined {
+    for (const rule of cvmList.rules) {
+        if (evaluateCondition(rule.condition, cvmList, context)) {
+            return rule;
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Evaluate a CVM condition against the transaction context
+ */
+function evaluateCondition(condition: CvmCondition, cvmList: CvmList, context: CvmContext): boolean {
+    switch (condition) {
+        case 'always':
+            return true;
+
+        case 'unattended_cash':
+            return context.unattendedCash === true;
+
+        case 'not_unattended_cash_manual_pin':
+            return context.unattendedCash !== true &&
+                   context.manualCash !== true &&
+                   context.purchaseWithCashback !== true;
+
+        case 'terminal_supports_cvm':
+            return context.terminalSupportsCvm === true;
+
+        case 'manual_cash':
+            return context.manualCash === true;
+
+        case 'purchase_with_cashback':
+            return context.purchaseWithCashback === true;
+
+        case 'amount_under_x':
+            return context.amount !== undefined && context.amount < cvmList.amountX;
+
+        case 'amount_over_x':
+            return context.amount !== undefined && context.amount > cvmList.amountX;
+
+        case 'amount_under_y':
+            return context.amount !== undefined && context.amount < cvmList.amountY;
+
+        case 'amount_over_y':
+            return context.amount !== undefined && context.amount > cvmList.amountY;
+
+        case 'unknown':
+        default:
+            return false;
+    }
 }
 
 /**
