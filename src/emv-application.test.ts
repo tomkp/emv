@@ -80,6 +80,33 @@ describe('EmvApplication', () => {
         });
     });
 
+    describe('selectPpse', () => {
+        it('should transmit SELECT APDU for PPSE (contactless)', async () => {
+            const response = await emv.selectPpse();
+            assert.ok(response);
+            assert.strictEqual(response.isOk(), true);
+            assert.strictEqual(transmitCalls.length, 1);
+
+            const apdu = transmitCalls[0];
+            assert.ok(apdu);
+            assert.strictEqual(apdu[0], 0x00); // CLA
+            assert.strictEqual(apdu[1], 0xa4); // INS: SELECT
+            assert.strictEqual(apdu[2], 0x04); // P1
+            assert.strictEqual(apdu[3], 0x00); // P2
+            // PPSE = "2PAY.SYS.DDF01" = 0x32 0x50 0x41 0x59 0x2e 0x53 0x59 0x53 0x2e 0x44 0x44 0x46 0x30 0x31
+            assert.strictEqual(apdu[4], 14); // Length of PPSE
+            assert.strictEqual(apdu[5], 0x32); // '2'
+        });
+
+        it('should parse PPSE response correctly', async () => {
+            mockCard.transmit = async () => Buffer.from([0x6f, 0x0a, 0x84, 0x07, 0x90, 0x00]);
+            const response = await emv.selectPpse();
+            assert.strictEqual(response.sw1, 0x90);
+            assert.strictEqual(response.sw2, 0x00);
+            assert.strictEqual(response.buffer.toString('hex'), '6f0a8407');
+        });
+    });
+
     describe('selectApplication', () => {
         it('should throw RangeError for AID shorter than 5 bytes', async () => {
             await assert.rejects(
