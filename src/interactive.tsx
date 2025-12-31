@@ -499,8 +499,6 @@ function PinScreen({ onSubmit, onBack, loading, attemptsLeft }: PinScreenProps):
         );
     }
 
-    const maskedPin = '•'.repeat(pin.length);
-
     return (
         <Box flexDirection="column">
             <Header />
@@ -517,15 +515,12 @@ function PinScreen({ onSubmit, onBack, loading, attemptsLeft }: PinScreenProps):
                 <Box>
                     <Text color="cyan" bold>PIN: </Text>
                     {isRawModeSupported ? (
-                        <Box>
-                            <Text color="yellow">{maskedPin}</Text>
-                            <TextInput
-                                value={pin}
-                                onChange={setPin}
-                                onSubmit={handleSubmit}
-                                mask="•"
-                            />
-                        </Box>
+                        <TextInput
+                            value={pin}
+                            onChange={setPin}
+                            onSubmit={handleSubmit}
+                            mask="•"
+                        />
                     ) : (
                         <Text color="gray">(raw mode not supported)</Text>
                     )}
