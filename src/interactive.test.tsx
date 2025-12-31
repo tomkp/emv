@@ -5,6 +5,13 @@ import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import { PinScreen } from './interactive.js';
+import { WelcomeScreen } from './interactive/screens/WelcomeScreen.js';
+import { ReadersScreen } from './interactive/screens/ReadersScreen.js';
+import { WaitingScreen } from './interactive/screens/WaitingScreen.js';
+import { AppsScreen } from './interactive/screens/AppsScreen.js';
+import { SelectedAppScreen } from './interactive/screens/SelectedAppScreen.js';
+import { PinResultScreen } from './interactive/screens/PinResultScreen.js';
+import { ErrorScreen } from './interactive/screens/ErrorScreen.js';
 
 describe('Interactive CLI', () => {
     describe('module exports', () => {
@@ -96,6 +103,127 @@ describe('Interactive CLI', () => {
             const frame = lastFrame() ?? '';
             unmount();
             assert.ok(frame.includes('1 attempt'), 'Should show attempts remaining warning');
+        });
+    });
+
+    describe('WelcomeScreen', () => {
+        it('should render welcome message', () => {
+            const { lastFrame, unmount } = render(<WelcomeScreen onContinue={() => {}} />);
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Welcome'));
+        });
+    });
+
+    describe('ReadersScreen', () => {
+        it('should show loading state', () => {
+            const { lastFrame, unmount } = render(
+                <ReadersScreen readers={[]} onSelect={() => {}} onRefresh={() => {}} loading={true} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Scanning'));
+        });
+
+        it('should show no readers message', () => {
+            const { lastFrame, unmount } = render(
+                <ReadersScreen readers={[]} onSelect={() => {}} onRefresh={() => {}} loading={false} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('No card readers'));
+        });
+
+        it('should list readers', () => {
+            const readers = [{ name: 'Test Reader', state: 0, atr: null }];
+            const { lastFrame, unmount } = render(
+                <ReadersScreen readers={readers} onSelect={() => {}} onRefresh={() => {}} loading={false} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Test Reader'));
+        });
+    });
+
+    describe('WaitingScreen', () => {
+        it('should show reader name', () => {
+            const { lastFrame, unmount } = render(<WaitingScreen readerName="My Reader" />);
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('My Reader'));
+        });
+    });
+
+    describe('AppsScreen', () => {
+        it('should show loading state', () => {
+            const { lastFrame, unmount } = render(
+                <AppsScreen apps={[]} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={true} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Reading'));
+        });
+
+        it('should show no apps message', () => {
+            const { lastFrame, unmount } = render(
+                <AppsScreen apps={[]} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={false} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('No applications'));
+        });
+
+        it('should list apps', () => {
+            const apps = [{ aid: 'A0000000041010', label: 'Mastercard' }];
+            const { lastFrame, unmount } = render(
+                <AppsScreen apps={apps} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={false} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Mastercard'));
+        });
+    });
+
+    describe('SelectedAppScreen', () => {
+        it('should show app details', () => {
+            const app = { aid: 'A0000000041010', label: 'Mastercard', priority: 1 };
+            const { lastFrame, unmount } = render(
+                <SelectedAppScreen app={app} onVerifyPin={() => {}} onExplore={() => {}} onBack={() => {}} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Mastercard'));
+            assert.ok(frame.includes('A0000000041010'));
+        });
+    });
+
+    describe('PinResultScreen', () => {
+        it('should show success', () => {
+            const { lastFrame, unmount } = render(
+                <PinResultScreen success={true} message="PIN OK" attemptsLeft={undefined} onContinue={() => {}} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('PIN OK'));
+        });
+
+        it('should show failure with attempts', () => {
+            const { lastFrame, unmount } = render(
+                <PinResultScreen success={false} message="Wrong PIN" attemptsLeft={2} onContinue={() => {}} />
+            );
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Wrong PIN'));
+            assert.ok(frame.includes('2'));
+        });
+    });
+
+    describe('ErrorScreen', () => {
+        it('should show error message', () => {
+            const { lastFrame, unmount } = render(<ErrorScreen message="Something broke" onBack={() => {}} />);
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Something broke'));
         });
     });
 
