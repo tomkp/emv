@@ -118,7 +118,12 @@ describe('Interactive CLI', () => {
     describe('ReadersScreen', () => {
         it('should show loading state', () => {
             const { lastFrame, unmount } = render(
-                <ReadersScreen readers={[]} onSelect={() => {}} onRefresh={() => {}} loading={true} />
+                <ReadersScreen
+                    readers={[]}
+                    onSelect={() => {}}
+                    onRefresh={() => {}}
+                    loading={true}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -127,7 +132,12 @@ describe('Interactive CLI', () => {
 
         it('should show no readers message', () => {
             const { lastFrame, unmount } = render(
-                <ReadersScreen readers={[]} onSelect={() => {}} onRefresh={() => {}} loading={false} />
+                <ReadersScreen
+                    readers={[]}
+                    onSelect={() => {}}
+                    onRefresh={() => {}}
+                    loading={false}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -137,7 +147,12 @@ describe('Interactive CLI', () => {
         it('should list readers', () => {
             const readers = [{ name: 'Test Reader', state: 0, atr: null }];
             const { lastFrame, unmount } = render(
-                <ReadersScreen readers={readers} onSelect={() => {}} onRefresh={() => {}} loading={false} />
+                <ReadersScreen
+                    readers={readers}
+                    onSelect={() => {}}
+                    onRefresh={() => {}}
+                    loading={false}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -157,7 +172,14 @@ describe('Interactive CLI', () => {
     describe('AppsScreen', () => {
         it('should show loading state', () => {
             const { lastFrame, unmount } = render(
-                <AppsScreen apps={[]} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={true} />
+                <AppsScreen
+                    apps={[]}
+                    readerName="Reader"
+                    atr="3B00"
+                    onSelect={() => {}}
+                    onBack={() => {}}
+                    loading={true}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -166,7 +188,14 @@ describe('Interactive CLI', () => {
 
         it('should show no apps message', () => {
             const { lastFrame, unmount } = render(
-                <AppsScreen apps={[]} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={false} />
+                <AppsScreen
+                    apps={[]}
+                    readerName="Reader"
+                    atr="3B00"
+                    onSelect={() => {}}
+                    onBack={() => {}}
+                    loading={false}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -176,7 +205,14 @@ describe('Interactive CLI', () => {
         it('should list apps', () => {
             const apps = [{ aid: 'A0000000041010', label: 'Mastercard' }];
             const { lastFrame, unmount } = render(
-                <AppsScreen apps={apps} readerName="Reader" atr="3B00" onSelect={() => {}} onBack={() => {}} loading={false} />
+                <AppsScreen
+                    apps={apps}
+                    readerName="Reader"
+                    atr="3B00"
+                    onSelect={() => {}}
+                    onBack={() => {}}
+                    loading={false}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -188,7 +224,12 @@ describe('Interactive CLI', () => {
         it('should show app details', () => {
             const app = { aid: 'A0000000041010', label: 'Mastercard', priority: 1 };
             const { lastFrame, unmount } = render(
-                <SelectedAppScreen app={app} onVerifyPin={() => {}} onExplore={() => {}} onBack={() => {}} />
+                <SelectedAppScreen
+                    app={app}
+                    onVerifyPin={() => {}}
+                    onExplore={() => {}}
+                    onBack={() => {}}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -200,7 +241,12 @@ describe('Interactive CLI', () => {
     describe('PinResultScreen', () => {
         it('should show success', () => {
             const { lastFrame, unmount } = render(
-                <PinResultScreen success={true} message="PIN OK" attemptsLeft={undefined} onContinue={() => {}} />
+                <PinResultScreen
+                    success={true}
+                    message="PIN OK"
+                    attemptsLeft={undefined}
+                    onContinue={() => {}}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -209,7 +255,12 @@ describe('Interactive CLI', () => {
 
         it('should show failure with attempts', () => {
             const { lastFrame, unmount } = render(
-                <PinResultScreen success={false} message="Wrong PIN" attemptsLeft={2} onContinue={() => {}} />
+                <PinResultScreen
+                    success={false}
+                    message="Wrong PIN"
+                    attemptsLeft={2}
+                    onContinue={() => {}}
+                />
             );
             const frame = lastFrame() ?? '';
             unmount();
@@ -220,7 +271,9 @@ describe('Interactive CLI', () => {
 
     describe('ErrorScreen', () => {
         it('should show error message', () => {
-            const { lastFrame, unmount } = render(<ErrorScreen message="Something broke" onBack={() => {}} />);
+            const { lastFrame, unmount } = render(
+                <ErrorScreen message="Something broke" onBack={() => {}} />
+            );
             const frame = lastFrame() ?? '';
             unmount();
             assert.ok(frame.includes('Something broke'));
