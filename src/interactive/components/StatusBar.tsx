@@ -12,13 +12,13 @@ export function StatusBar({ message, type = 'info' }: StatusBarProps): React.JSX
         success: 'green',
         warning: 'yellow',
         error: 'red',
-    } as const;
+    } as const satisfies Record<NonNullable<StatusBarProps['type']>, string>;
     const icons = {
         info: 'ℹ',
         success: '✓',
         warning: '⚠',
         error: '✗',
-    };
+    } as const satisfies Record<NonNullable<StatusBarProps['type']>, string>;
 
     return (
         <Box marginY={1} paddingX={2}>

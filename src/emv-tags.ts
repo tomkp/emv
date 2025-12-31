@@ -629,7 +629,7 @@ export const EMV_TAGS = {
     '9F4C': 'ICC_DYNAMIC_NUMBER',
     A5: 'FCI_TEMPLATE',
     BF0C: 'FCI_ISSUER_DD',
-} as const;
+} as const satisfies Record<string, string>;
 
 /**
  * Get the human-readable name for an EMV tag
