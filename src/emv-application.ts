@@ -202,6 +202,28 @@ export interface DiscoverAppsResult {
 }
 
 /**
+ * Result from parsing a GPO (GET PROCESSING OPTIONS) response
+ */
+export interface GpoResult {
+    /** Application Interchange Profile */
+    aip: Buffer | undefined;
+    /** Application File Locator entries */
+    afl: AflEntry[];
+}
+
+/**
+ * Result from parsing a Generate AC response
+ */
+export interface GenerateAcResult {
+    /** Type of cryptogram returned */
+    cryptogramType: 'ARQC' | 'TC' | 'AAC' | undefined;
+    /** Application cryptogram value */
+    cryptogram: Buffer | undefined;
+    /** Application Transaction Counter */
+    atc: number | undefined;
+}
+
+/**
  * Payment System Environment (PSE) identifier for contact cards
  * "1PAY.SYS.DDF01" encoded as bytes
  */
@@ -351,6 +373,58 @@ export function parseAfl(buffer: Buffer): AflEntry[] {
         });
     }
     return entries;
+}
+
+/**
+ * Parse a GPO (GET PROCESSING OPTIONS) response buffer.
+ * Supports both Format 1 (tag 80) and Format 2 (tag 77) responses.
+ *
+ * @param buffer - Raw GPO response data (without status words)
+ * @returns Parsed AIP and AFL entries
+ */
+export function parseGpoResponseBuffer(buffer: Buffer): GpoResult {
+    if (buffer.length === 0) {
+        return { aip: undefined, afl: [] };
+    }
+
+    const firstByte = buffer[0];
+    if (firstByte === 0x80) {
+        // Format 1: 80 len AIP(2) AFL(var)
+        const len = buffer[1];
+        if (len === undefined || len < 2) {
+            return { aip: undefined, afl: [] };
+        }
+        const aip = buffer.subarray(2, 4);
+        const aflBuffer = buffer.subarray(4, 2 + len);
+        return { aip, afl: parseAfl(aflBuffer) };
+    } else if (firstByte === 0x77) {
+        // Format 2: TLV structure with tags 82 (AIP) and 94 (AFL)
+        const aip = findTagInBuffer(buffer, 0x82);
+        const aflBuffer = findTagInBuffer(buffer, 0x94);
+        return { aip, afl: aflBuffer ? parseAfl(aflBuffer) : [] };
+    }
+
+    // Unknown format
+    return { aip: undefined, afl: [] };
+}
+
+/**
+ * Parse a Generate AC response buffer.
+ * Extracts cryptogram type, cryptogram value, and ATC.
+ *
+ * @param buffer - Raw Generate AC response data (without status words)
+ * @returns Parsed cryptogram details
+ */
+export function parseGenerateAcResponse(buffer: Buffer): GenerateAcResult {
+    const cid = findTagInBuffer(buffer, 0x9f27);
+    const cryptogram = findTagInBuffer(buffer, 0x9f26);
+    const atcBuffer = findTagInBuffer(buffer, 0x9f36);
+
+    const cryptogramType =
+        cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
+    const atc = atcBuffer && atcBuffer.length >= 2 ? atcBuffer.readUInt16BE(0) : undefined;
+
+    return { cryptogramType, cryptogram, atc };
 }
 
 /**
@@ -1151,25 +1225,8 @@ export class EmvApplication {
             };
         }
 
-        // Parse GPO response - Format 1 (tag 80) or Format 2 (tag 77)
-        let aip: Buffer | undefined;
-        let aflBuffer: Buffer | undefined;
-
-        const responseData = gpoResponse.buffer;
-        if (responseData[0] === 0x80) {
-            // Format 1: 80 len AIP(2) AFL(var)
-            const len = responseData[1];
-            if (len !== undefined && len >= 2) {
-                aip = responseData.subarray(2, 4);
-                aflBuffer = responseData.subarray(4, 2 + len);
-            }
-        } else if (responseData[0] === 0x77) {
-            // Format 2: look for tags 82 (AIP) and 94 (AFL)
-            aip = findTagInBuffer(responseData, 0x82);
-            aflBuffer = findTagInBuffer(responseData, 0x94);
-        }
-
-        const afl = aflBuffer ? parseAfl(aflBuffer) : [];
+        // Parse GPO response using the pure function
+        const { aip, afl } = parseGpoResponseBuffer(gpoResponse.buffer);
 
         // Step 2: Read records from AFL
         const records: Buffer[] = [];
@@ -1237,23 +1294,17 @@ export class EmvApplication {
             };
         }
 
-        // Parse Generate AC response
-        const cid = findTagInBuffer(acResponse.buffer, 0x9f27);
-        const cryptogram = findTagInBuffer(acResponse.buffer, 0x9f26);
-        const atcBuffer = findTagInBuffer(acResponse.buffer, 0x9f36);
-
-        const returnedCryptogramType =
-            cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
-        const atc = atcBuffer && atcBuffer.length >= 2 ? atcBuffer.readUInt16BE(0) : undefined;
+        // Parse Generate AC response using the pure function
+        const acResult = parseGenerateAcResponse(acResponse.buffer);
 
         return {
             success: true,
             aip,
             afl,
             records,
-            cryptogramType: returnedCryptogramType,
-            cryptogram,
-            atc,
+            cryptogramType: acResult.cryptogramType,
+            cryptogram: acResult.cryptogram,
+            atc: acResult.atc,
             generateAcResponse: acResponse.buffer,
         };
     }

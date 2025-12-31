@@ -10,6 +10,8 @@ export {
     parseCvmList,
     evaluateCvm,
     stringToBcd,
+    parseGpoResponseBuffer,
+    parseGenerateAcResponse,
 } from './emv-application.js';
 export type {
     AflEntry,
@@ -26,6 +28,8 @@ export type {
     CvmContext,
     DiscoveredApp,
     DiscoverAppsResult,
+    GpoResult,
+    GenerateAcResult,
 } from './emv-application.js';
 export {
     EMV_TAGS,
