@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { EMV_TAGS, format, findTag, findTagInBuffer, getTagName, formatGpoResponse } from './index.js';
+import {
+    EMV_TAGS,
+    format,
+    findTag,
+    findTagInBuffer,
+    getTagName,
+    formatGpoResponse,
+} from './index.js';
 import type { CardResponse } from './types.js';
 
 function createMockResponse(buffer: Buffer): CardResponse {
@@ -132,7 +139,10 @@ describe('format', () => {
     it('should format Track 2 data with decoded fields', () => {
         // Tag 57 (Track 2): PAN 4659414873268675, Sep D, Exp 2108, Svc 201
         const response = createMockResponse(
-            Buffer.from([0x57, 0x13, 0x46, 0x59, 0x41, 0x48, 0x73, 0x26, 0x86, 0x75, 0xd2, 0x10, 0x82, 0x01, 0x39, 0x90, 0x00, 0x00, 0x00, 0x00, 0x1f])
+            Buffer.from([
+                0x57, 0x13, 0x46, 0x59, 0x41, 0x48, 0x73, 0x26, 0x86, 0x75, 0xd2, 0x10, 0x82, 0x01,
+                0x39, 0x90, 0x00, 0x00, 0x00, 0x00, 0x1f,
+            ])
         );
         const result = format(response);
         // Should show raw hex
@@ -157,9 +167,7 @@ describe('format', () => {
 
     it('should format expiry date with raw hex and decoded date', () => {
         // Tag 5F24 (APP_EXPIRY): 210831 = 2021-08-31
-        const response = createMockResponse(
-            Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31])
-        );
+        const response = createMockResponse(Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31]));
         const result = format(response);
         // Should show raw hex
         assert.ok(result.includes('210831'), 'Should contain raw hex');
@@ -169,9 +177,7 @@ describe('format', () => {
 
     it('should format service code with meaning', () => {
         // Tag 5F30 (SERVICE_CODE): 0201
-        const response = createMockResponse(
-            Buffer.from([0x5f, 0x30, 0x02, 0x02, 0x01])
-        );
+        const response = createMockResponse(Buffer.from([0x5f, 0x30, 0x02, 0x02, 0x01]));
         const result = format(response);
         // Should show raw hex
         assert.ok(result.includes('0201'), 'Should contain raw hex');
@@ -195,9 +201,7 @@ describe('format', () => {
 
     it('should format AUC flags with meaning', () => {
         // Tag 9F07 (APP_USAGE_CONTROL): FF80 = all domestic/international cash/goods/services + ATMs + terminals + domestic cashback
-        const response = createMockResponse(
-            Buffer.from([0x9f, 0x07, 0x02, 0xff, 0x80])
-        );
+        const response = createMockResponse(Buffer.from([0x9f, 0x07, 0x02, 0xff, 0x80]));
         const result = format(response);
         // Should show raw hex
         assert.ok(result.includes('FF80'), 'Should contain raw hex');
@@ -236,7 +240,10 @@ describe('format', () => {
     it('should format Track 1 Discretionary Data with decoded ASCII on new line', () => {
         // Tag 9F1F (TRACK_1_DD): ASCII-encoded discretionary data "205400932000000"
         const response = createMockResponse(
-            Buffer.from([0x9f, 0x1f, 0x0f, 0x32, 0x30, 0x35, 0x34, 0x30, 0x30, 0x39, 0x33, 0x32, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30])
+            Buffer.from([
+                0x9f, 0x1f, 0x0f, 0x32, 0x30, 0x35, 0x34, 0x30, 0x30, 0x39, 0x33, 0x32, 0x30, 0x30,
+                0x30, 0x30, 0x30, 0x30,
+            ])
         );
         const result = format(response);
         // Should show raw hex
@@ -259,9 +266,7 @@ describe('format', () => {
 
     it('should use color coding for date tags', () => {
         // Tag 5F24 (APP_EXPIRY) should use date color (yellow)
-        const response = createMockResponse(
-            Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31])
-        );
+        const response = createMockResponse(Buffer.from([0x5f, 0x24, 0x03, 0x21, 0x08, 0x31]));
         const result = format(response);
         // Should contain yellow ANSI code for dates
         assert.ok(result.includes('\x1b[33m'), 'Should use yellow color for date tags');

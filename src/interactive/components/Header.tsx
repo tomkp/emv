@@ -8,53 +8,57 @@ export function Header(): React.JSX.Element {
             <Gradient name="rainbow">
                 <Text bold>{'╔' + '═'.repeat(63) + '╗'}</Text>
             </Gradient>
-            <Text color="cyan" bold>║{' '.repeat(63)}║</Text>
+            <Text color="cyan" bold>
+                ║{' '.repeat(63)}║
+            </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>███████╗███╗   ███╗██╗   ██╗</Text>
+                    <Text>███████╗███╗ ███╗██╗ ██╗</Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>██╔════╝████╗ ████║██║   ██║</Text>
+                    <Text>██╔════╝████╗ ████║██║ ██║</Text>
                 </Gradient>
-                <Text color="yellow">   Chip &amp; PIN Explorer</Text>
+                <Text color="yellow"> Chip &amp; PIN Explorer</Text>
                 <Text color="cyan">{' '.repeat(11)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>█████╗  ██╔████╔██║██║   ██║</Text>
+                    <Text>█████╗ ██╔████╔██║██║ ██║</Text>
                 </Gradient>
-                <Text color="yellow">   Interactive Mode</Text>
+                <Text color="yellow"> Interactive Mode</Text>
                 <Text color="cyan">{' '.repeat(14)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>██╔══╝  ██║╚██╔╝██║╚██╗ ██╔╝</Text>
+                    <Text>██╔══╝ ██║╚██╔╝██║╚██╗ ██╔╝</Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
                     <Text>███████╗██║ ╚═╝ ██║ ╚████╔╝ </Text>
                 </Gradient>
-                <Text color="gray">   v2.0.0</Text>
+                <Text color="gray"> v2.0.0</Text>
                 <Text color="cyan">{' '.repeat(24)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>╚══════╝╚═╝     ╚═╝  ╚═══╝  </Text>
+                    <Text>╚══════╝╚═╝ ╚═╝ ╚═══╝ </Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
-            <Text color="cyan" bold>║{' '.repeat(63)}║</Text>
+            <Text color="cyan" bold>
+                ║{' '.repeat(63)}║
+            </Text>
             <Gradient name="rainbow">
                 <Text bold>{'╚' + '═'.repeat(63) + '╝'}</Text>
             </Gradient>

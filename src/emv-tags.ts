@@ -154,7 +154,8 @@ function formatTrack2(buffer: Buffer): string {
     const serviceCode = rest.substring(4, 7);
     const discretionary = rest.substring(7).replace(/F+$/i, '');
 
-    const expiryFormatted = expiry.length === 4 ? `20${expiry.substring(0, 2)}-${expiry.substring(2, 4)}` : expiry;
+    const expiryFormatted =
+        expiry.length === 4 ? `20${expiry.substring(0, 2)}-${expiry.substring(2, 4)}` : expiry;
 
     let result = `${hex}\n      ${DIM}PAN: ${formatPan(pan)}`;
     result += `, Exp: ${expiryFormatted}`;
@@ -284,7 +285,8 @@ function formatCvmList(buffer: Buffer): string {
         const cvmName = CVM_CODES[cvmCode] ?? `Unknown(${cvmCode.toString(16)})`;
         const condName = CVM_CONDITIONS[condByte] ?? `Cond(${condByte.toString(16)})`;
         const failStr = failIfUnsuccessful ? '' : ' [continue if fails]';
-        const ruleHex = cvmByte.toString(16).padStart(2, '0').toUpperCase() +
+        const ruleHex =
+            cvmByte.toString(16).padStart(2, '0').toUpperCase() +
             condByte.toString(16).padStart(2, '0').toUpperCase();
 
         rules.push(`${ruleHex} ${DIM}${cvmName} ${condName}${failStr}${RESET}`);
@@ -326,7 +328,7 @@ function formatAuc(buffer: Buffer): string {
     const enabled: string[] = [];
     for (const [byteIdx, mask, name] of AUC_BITS) {
         const byte = buffer[byteIdx];
-        if (byte !== undefined && (byte & mask)) {
+        if (byte !== undefined && byte & mask) {
             enabled.push(name);
         }
     }
@@ -380,7 +382,7 @@ function formatIacTvr(buffer: Buffer): string {
         if (byte === undefined) continue;
 
         for (const [idx, mask, name] of TVR_BITS) {
-            if (idx === byteIdx && (byte & mask)) {
+            if (idx === byteIdx && byte & mask) {
                 setBits.push(name);
             }
         }
@@ -468,7 +470,9 @@ function formatGpoFormat1(hex: string, aip: Buffer, afl: Buffer): string {
         }
     }
 
-    lines.push(`${DIM}AIP: ${aipHex}${aipFeatures.length > 0 ? ` (${aipFeatures.join(', ')})` : ''}${RESET}`);
+    lines.push(
+        `${DIM}AIP: ${aipHex}${aipFeatures.length > 0 ? ` (${aipFeatures.join(', ')})` : ''}${RESET}`
+    );
 
     // Decode AFL (4 bytes per entry)
     if (afl.length >= 4) {
@@ -478,7 +482,9 @@ function formatGpoFormat1(hex: string, aip: Buffer, afl: Buffer): string {
             const firstRec = afl[i + 1] ?? 0;
             const lastRec = afl[i + 2] ?? 0;
             const sdaRecs = afl[i + 3] ?? 0;
-            aflEntries.push(`SFI ${String(sfi)}: records ${String(firstRec)}-${String(lastRec)}${sdaRecs > 0 ? ` (${String(sdaRecs)} for SDA)` : ''}`);
+            aflEntries.push(
+                `SFI ${String(sfi)}: records ${String(firstRec)}-${String(lastRec)}${sdaRecs > 0 ? ` (${String(sdaRecs)} for SDA)` : ''}`
+            );
         }
         lines.push(`${DIM}AFL: ${aflEntries.join(', ')}${RESET}`);
     }

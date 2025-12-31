@@ -38,7 +38,10 @@ describe('Interactive CLI', () => {
 
             // Should show PIN input field (not the fallback message)
             assert.ok(frame.includes('PIN:'), 'Should display PIN label');
-            assert.ok(!frame.includes('raw mode not supported'), 'Should not show raw mode fallback');
+            assert.ok(
+                !frame.includes('raw mode not supported'),
+                'Should not show raw mode fallback'
+            );
         });
 
         it('should show fallback message when raw mode is not supported', () => {
@@ -54,7 +57,10 @@ describe('Interactive CLI', () => {
 
             const frame = lastFrame() ?? '';
             unmount();
-            assert.ok(frame.includes('raw mode not supported'), 'Should show raw mode not supported message');
+            assert.ok(
+                frame.includes('raw mode not supported'),
+                'Should show raw mode not supported message'
+            );
         });
 
         it('should show loading state', () => {
@@ -70,7 +76,10 @@ describe('Interactive CLI', () => {
 
             const frame = lastFrame() ?? '';
             unmount();
-            assert.ok(frame.includes('Verifying PIN'), 'Should show verifying message when loading');
+            assert.ok(
+                frame.includes('Verifying PIN'),
+                'Should show verifying message when loading'
+            );
         });
 
         it('should show warning when attempts are low', () => {
@@ -150,10 +159,18 @@ describe('Interactive CLI', () => {
             const fixedMaskCount = (fixedFrame.match(/•/g) ?? []).length;
 
             // Buggy version has 8 masks (4 manual + 4 from TextInput)
-            assert.strictEqual(buggyMaskCount, 8, 'Buggy component should show 8 masks (double masking)');
+            assert.strictEqual(
+                buggyMaskCount,
+                8,
+                'Buggy component should show 8 masks (double masking)'
+            );
 
             // Fixed version has 4 masks (just from TextInput)
-            assert.strictEqual(fixedMaskCount, 4, 'Fixed component should show 4 masks (single masking)');
+            assert.strictEqual(
+                fixedMaskCount,
+                4,
+                'Fixed component should show 4 masks (single masking)'
+            );
         });
 
         it('should mask different PIN lengths correctly', () => {

@@ -424,8 +424,7 @@ export function parseGenerateAcResponse(buffer: Buffer): GenerateAcResult {
     const cryptogram = findTagInBuffer(buffer, 0x9f26);
     const atcBuffer = findTagInBuffer(buffer, 0x9f36);
 
-    const cryptogramType =
-        cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
+    const cryptogramType = cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
     const atc = atcBuffer && atcBuffer.length >= 2 ? atcBuffer.readUInt16BE(0) : undefined;
 
     return { cryptogramType, cryptogram, atc };

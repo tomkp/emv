@@ -47,35 +47,35 @@ Both use the same APDU commands. This library works with both.
 
 Every command follows the same format:
 
-| Field | Size | Purpose |
-|-------|------|---------|
-| CLA | 1 byte | Class - usually `00` for standard commands |
-| INS | 1 byte | Instruction - the command type |
-| P1 | 1 byte | Parameter 1 - varies by command |
-| P2 | 1 byte | Parameter 2 - varies by command |
-| Lc | 1 byte | Length of data being sent (optional) |
-| Data | variable | Command data (optional) |
-| Le | 1 byte | Expected response length (optional) |
+| Field | Size     | Purpose                                    |
+| ----- | -------- | ------------------------------------------ |
+| CLA   | 1 byte   | Class - usually `00` for standard commands |
+| INS   | 1 byte   | Instruction - the command type             |
+| P1    | 1 byte   | Parameter 1 - varies by command            |
+| P2    | 1 byte   | Parameter 2 - varies by command            |
+| Lc    | 1 byte   | Length of data being sent (optional)       |
+| Data  | variable | Command data (optional)                    |
+| Le    | 1 byte   | Expected response length (optional)        |
 
 ### Response structure
 
 Every response ends with two status bytes:
 
-| Field | Size | Purpose |
-|-------|------|---------|
-| Data | variable | Response data (optional) |
-| SW1 | 1 byte | Status word 1 |
-| SW2 | 1 byte | Status word 2 |
+| Field | Size     | Purpose                  |
+| ----- | -------- | ------------------------ |
+| Data  | variable | Response data (optional) |
+| SW1   | 1 byte   | Status word 1            |
+| SW2   | 1 byte   | Status word 2            |
 
 Common status codes:
 
-| SW1 SW2 | Meaning |
-|---------|---------|
-| `90 00` | Success |
-| `6A 82` | File or application not found |
+| SW1 SW2 | Meaning                         |
+| ------- | ------------------------------- |
+| `90 00` | Success                         |
+| `6A 82` | File or application not found   |
 | `63 Cx` | Wrong PIN, x attempts remaining |
-| `69 83` | PIN blocked |
-| `69 85` | Conditions not satisfied |
+| `69 83` | PIN blocked                     |
+| `69 85` | Conditions not satisfied        |
 
 ## Transaction flow
 
@@ -151,13 +151,13 @@ Data: AID (Application Identifier)
 
 Common AIDs:
 
-| AID | Application |
-|-----|-------------|
-| `A0 00 00 00 03` | Visa |
-| `A0 00 00 00 04` | Mastercard |
+| AID              | Application      |
+| ---------------- | ---------------- |
+| `A0 00 00 00 03` | Visa             |
+| `A0 00 00 00 04` | Mastercard       |
 | `A0 00 00 00 25` | American Express |
-| `A0 00 00 00 65` | JCB |
-| `A0 00 00 01 52` | Discover |
+| `A0 00 00 00 65` | JCB              |
+| `A0 00 00 01 52` | Discover         |
 
 ### READ RECORD
 
@@ -185,12 +185,12 @@ P2:  Tag byte 2
 
 Useful tags:
 
-| Tag | Data |
-|-----|------|
-| `9F 17` | PIN try counter |
+| Tag     | Data                            |
+| ------- | ------------------------------- |
+| `9F 17` | PIN try counter                 |
 | `9F 36` | Application transaction counter |
-| `9F 13` | Last online ATC |
-| `9F 4F` | Log format |
+| `9F 13` | Last online ATC                 |
+| `9F 4F` | Log format                      |
 
 ### VERIFY
 
@@ -290,18 +290,18 @@ Tags can be:
 
 Common EMV tags:
 
-| Tag | Name | Description |
-|-----|------|-------------|
-| `4F` | AID | Application identifier |
-| `50` | Application Label | Human-readable app name |
-| `57` | Track 2 | Card number and expiry |
-| `5A` | PAN | Primary account number |
-| `5F20` | Cardholder Name | Name on the card |
-| `5F24` | Expiry Date | YYMMDD format |
-| `82` | AIP | Application Interchange Profile |
-| `94` | AFL | Application File Locator |
-| `9F26` | Cryptogram | Application cryptogram |
-| `9F27` | CID | Cryptogram type indicator |
+| Tag    | Name              | Description                     |
+| ------ | ----------------- | ------------------------------- |
+| `4F`   | AID               | Application identifier          |
+| `50`   | Application Label | Human-readable app name         |
+| `57`   | Track 2           | Card number and expiry          |
+| `5A`   | PAN               | Primary account number          |
+| `5F20` | Cardholder Name   | Name on the card                |
+| `5F24` | Expiry Date       | YYMMDD format                   |
+| `82`   | AIP               | Application Interchange Profile |
+| `94`   | AFL               | Application File Locator        |
+| `9F26` | Cryptogram        | Application cryptogram          |
+| `9F27` | CID               | Cryptogram type indicator       |
 
 ## Security considerations
 
