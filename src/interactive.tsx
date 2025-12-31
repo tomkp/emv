@@ -10,7 +10,7 @@ import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
 import TextInput from 'ink-text-input';
 import Gradient from 'ink-gradient';
-import { EmvApplication } from './emv-application.js';
+import { EmvApplication, type DiscoveredApp } from './emv-application.js';
 import { format as formatTlv, findTagInBuffer, formatGpoResponse } from './emv-tags.js';
 
 // ============================================================================
@@ -44,11 +44,8 @@ interface CardInsertedEvent {
     card: CardInfo;
 }
 
-interface AppInfo {
-    aid: string;
-    label: string | undefined;
-    priority: number | undefined;
-}
+// Use DiscoveredApp from emv-application.ts
+type AppInfo = DiscoveredApp;
 
 type Screen =
     | 'welcome'
@@ -73,53 +70,57 @@ function Header(): React.JSX.Element {
             <Gradient name="rainbow">
                 <Text bold>{'╔' + '═'.repeat(63) + '╗'}</Text>
             </Gradient>
-            <Text color="cyan" bold>║{' '.repeat(63)}║</Text>
+            <Text color="cyan" bold>
+                ║{' '.repeat(63)}║
+            </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>███████╗███╗   ███╗██╗   ██╗</Text>
+                    <Text>███████╗███╗ ███╗██╗ ██╗</Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>██╔════╝████╗ ████║██║   ██║</Text>
+                    <Text>██╔════╝████╗ ████║██║ ██║</Text>
                 </Gradient>
-                <Text color="yellow">   Chip &amp; PIN Explorer</Text>
+                <Text color="yellow"> Chip &amp; PIN Explorer</Text>
                 <Text color="cyan">{' '.repeat(11)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>█████╗  ██╔████╔██║██║   ██║</Text>
+                    <Text>█████╗ ██╔████╔██║██║ ██║</Text>
                 </Gradient>
-                <Text color="yellow">   Interactive Mode</Text>
+                <Text color="yellow"> Interactive Mode</Text>
                 <Text color="cyan">{' '.repeat(14)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>██╔══╝  ██║╚██╔╝██║╚██╗ ██╔╝</Text>
+                    <Text>██╔══╝ ██║╚██╔╝██║╚██╗ ██╔╝</Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
                     <Text>███████╗██║ ╚═╝ ██║ ╚████╔╝ </Text>
                 </Gradient>
-                <Text color="gray">   v2.0.0</Text>
+                <Text color="gray"> v2.0.0</Text>
                 <Text color="cyan">{' '.repeat(24)}║</Text>
             </Text>
             <Text bold>
-                <Text color="cyan">║  </Text>
+                <Text color="cyan">║ </Text>
                 <Gradient name="pastel">
-                    <Text>╚══════╝╚═╝     ╚═╝  ╚═══╝  </Text>
+                    <Text>╚══════╝╚═╝ ╚═╝ ╚═══╝ </Text>
                 </Gradient>
                 <Text color="cyan">{' '.repeat(33)}║</Text>
             </Text>
-            <Text color="cyan" bold>║{' '.repeat(63)}║</Text>
+            <Text color="cyan" bold>
+                ║{' '.repeat(63)}║
+            </Text>
             <Gradient name="rainbow">
                 <Text bold>{'╚' + '═'.repeat(63) + '╝'}</Text>
             </Gradient>
@@ -127,7 +128,13 @@ function Header(): React.JSX.Element {
     );
 }
 
-function StatusBar({ message, type = 'info' }: { message: string; type?: 'info' | 'success' | 'warning' | 'error' }): React.JSX.Element {
+function StatusBar({
+    message,
+    type = 'info',
+}: {
+    message: string;
+    type?: 'info' | 'success' | 'warning' | 'error';
+}): React.JSX.Element {
     const colors = {
         info: 'blue',
         success: 'green',
@@ -183,7 +190,13 @@ function Footer({ hints }: { hints: { keys: string; description: string }[] }): 
     );
 }
 
-function CardBox({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
+function CardBox({
+    title,
+    children,
+}: {
+    title: string;
+    children: React.ReactNode;
+}): React.JSX.Element {
     return (
         <Box flexDirection="column" marginY={1} paddingX={2}>
             <Box marginBottom={1}>
@@ -218,7 +231,11 @@ function WelcomeScreen({ onContinue }: WelcomeScreenProps): React.JSX.Element {
             <Header />
             <CardBox title="Welcome">
                 <Text>
-                    Welcome to the <Text color="cyan" bold>EMV Interactive Explorer</Text>!
+                    Welcome to the{' '}
+                    <Text color="cyan" bold>
+                        EMV Interactive Explorer
+                    </Text>
+                    !
                 </Text>
                 <Text> </Text>
                 <Text color="gray">
@@ -228,7 +245,12 @@ function WelcomeScreen({ onContinue }: WelcomeScreenProps): React.JSX.Element {
                     You can discover applications, read card data, and verify PINs.
                 </Text>
             </CardBox>
-            <Footer hints={[{ keys: 'Enter', description: 'Start' }, { keys: 'q', description: 'Quit' }]} />
+            <Footer
+                hints={[
+                    { keys: 'Enter', description: 'Start' },
+                    { keys: 'q', description: 'Quit' },
+                ]}
+            />
         </Box>
     );
 }
@@ -240,7 +262,12 @@ interface ReadersScreenProps {
     loading: boolean;
 }
 
-function ReadersScreen({ readers, onSelect, onRefresh, loading }: ReadersScreenProps): React.JSX.Element {
+function ReadersScreen({
+    readers,
+    onSelect,
+    onRefresh,
+    loading,
+}: ReadersScreenProps): React.JSX.Element {
     useInput((input) => {
         if (input === 'r') {
             onRefresh();
@@ -260,8 +287,16 @@ function ReadersScreen({ readers, onSelect, onRefresh, loading }: ReadersScreenP
         return (
             <Box flexDirection="column">
                 <Header />
-                <StatusBar message="No card readers found. Connect a reader and press 'r' to refresh." type="warning" />
-                <Footer hints={[{ keys: 'r', description: 'Refresh' }, { keys: 'q', description: 'Quit' }]} />
+                <StatusBar
+                    message="No card readers found. Connect a reader and press 'r' to refresh."
+                    type="warning"
+                />
+                <Footer
+                    hints={[
+                        { keys: 'r', description: 'Refresh' },
+                        { keys: 'q', description: 'Quit' },
+                    ]}
+                />
             </Box>
         );
     }
@@ -283,7 +318,9 @@ function ReadersScreen({ readers, onSelect, onRefresh, loading }: ReadersScreenP
             <CardBox title="Select a Card Reader">
                 <SelectInput
                     items={items}
-                    onSelect={(item) => { onSelect(item.value); }}
+                    onSelect={(item) => {
+                        onSelect(item.value);
+                    }}
                     itemComponent={({ isSelected, label }) =>
                         isSelected ? (
                             <Text color="cyan" bold>
@@ -299,7 +336,14 @@ function ReadersScreen({ readers, onSelect, onRefresh, loading }: ReadersScreenP
                     }
                 />
             </CardBox>
-            <Footer hints={[{ keys: '↑↓', description: 'Navigate' }, { keys: 'Enter', description: 'Select' }, { keys: 'r', description: 'Refresh' }, { keys: 'q', description: 'Quit' }]} />
+            <Footer
+                hints={[
+                    { keys: '↑↓', description: 'Navigate' },
+                    { keys: 'Enter', description: 'Select' },
+                    { keys: 'r', description: 'Refresh' },
+                    { keys: 'q', description: 'Quit' },
+                ]}
+            />
         </Box>
     );
 }
@@ -317,7 +361,12 @@ function WaitingScreen({ readerName }: WaitingScreenProps): React.JSX.Element {
                 <Text> </Text>
                 <LoadingSpinner message="Insert a card to continue..." />
             </CardBox>
-            <Footer hints={[{ keys: 'Esc', description: 'Back' }, { keys: 'q', description: 'Quit' }]} />
+            <Footer
+                hints={[
+                    { keys: 'Esc', description: 'Back' },
+                    { keys: 'q', description: 'Quit' },
+                ]}
+            />
         </Box>
     );
 }
@@ -331,7 +380,14 @@ interface AppsScreenProps {
     loading: boolean;
 }
 
-function AppsScreen({ apps, readerName, atr, onSelect, onBack, loading }: AppsScreenProps): React.JSX.Element {
+function AppsScreen({
+    apps,
+    readerName,
+    atr,
+    onSelect,
+    onBack,
+    loading,
+}: AppsScreenProps): React.JSX.Element {
     useInput((_input, key) => {
         if (key.escape) {
             onBack();
@@ -356,7 +412,12 @@ function AppsScreen({ apps, readerName, atr, onSelect, onBack, loading }: AppsSc
                     <Text color="gray">ATR: {atr}</Text>
                 </CardBox>
                 <StatusBar message="No applications found on this card." type="warning" />
-                <Footer hints={[{ keys: 'Esc', description: 'Back' }, { keys: 'q', description: 'Quit' }]} />
+                <Footer
+                    hints={[
+                        { keys: 'Esc', description: 'Back' },
+                        { keys: 'q', description: 'Quit' },
+                    ]}
+                />
             </Box>
         );
     }
@@ -377,7 +438,9 @@ function AppsScreen({ apps, readerName, atr, onSelect, onBack, loading }: AppsSc
             <CardBox title="Select an Application">
                 <SelectInput
                     items={items}
-                    onSelect={(item) => { onSelect(item.value); }}
+                    onSelect={(item) => {
+                        onSelect(item.value);
+                    }}
                     itemComponent={({ isSelected, label }) =>
                         isSelected ? (
                             <Text color="cyan" bold>
@@ -393,7 +456,14 @@ function AppsScreen({ apps, readerName, atr, onSelect, onBack, loading }: AppsSc
                     }
                 />
             </CardBox>
-            <Footer hints={[{ keys: '↑↓', description: 'Navigate' }, { keys: 'Enter', description: 'Select' }, { keys: 'Esc', description: 'Back' }, { keys: 'q', description: 'Quit' }]} />
+            <Footer
+                hints={[
+                    { keys: '↑↓', description: 'Navigate' },
+                    { keys: 'Enter', description: 'Select' },
+                    { keys: 'Esc', description: 'Back' },
+                    { keys: 'q', description: 'Quit' },
+                ]}
+            />
         </Box>
     );
 }
@@ -405,7 +475,12 @@ interface SelectedAppScreenProps {
     onBack: () => void;
 }
 
-function SelectedAppScreen({ app, onVerifyPin, onExplore, onBack }: SelectedAppScreenProps): React.JSX.Element {
+function SelectedAppScreen({
+    app,
+    onVerifyPin,
+    onExplore,
+    onBack,
+}: SelectedAppScreenProps): React.JSX.Element {
     const items = [
         { label: '🔐  Verify PIN', value: 'pin' },
         { label: '🔍  Explore Card Data', value: 'explore' },
@@ -417,16 +492,22 @@ function SelectedAppScreen({ app, onVerifyPin, onExplore, onBack }: SelectedAppS
             <Header />
             <CardBox title="Selected Application">
                 <Text>
-                    <Text color="cyan" bold>Name: </Text>
+                    <Text color="cyan" bold>
+                        Name:{' '}
+                    </Text>
                     <Text>{app.label ?? 'Unknown'}</Text>
                 </Text>
                 <Text>
-                    <Text color="cyan" bold>AID: </Text>
+                    <Text color="cyan" bold>
+                        AID:{' '}
+                    </Text>
                     <Text color="yellow">{app.aid}</Text>
                 </Text>
                 {app.priority !== undefined && (
                     <Text>
-                        <Text color="cyan" bold>Priority: </Text>
+                        <Text color="cyan" bold>
+                            Priority:{' '}
+                        </Text>
                         <Text>{app.priority}</Text>
                     </Text>
                 )}
@@ -462,7 +543,13 @@ function SelectedAppScreen({ app, onVerifyPin, onExplore, onBack }: SelectedAppS
                     }
                 />
             </CardBox>
-            <Footer hints={[{ keys: '↑↓', description: 'Navigate' }, { keys: 'Enter', description: 'Select' }, { keys: 'q', description: 'Quit' }]} />
+            <Footer
+                hints={[
+                    { keys: '↑↓', description: 'Navigate' },
+                    { keys: 'Enter', description: 'Select' },
+                    { keys: 'q', description: 'Quit' },
+                ]}
+            />
         </Box>
     );
 }
@@ -476,7 +563,13 @@ export interface PinScreenProps {
     isRawModeSupported?: boolean;
 }
 
-function PinScreen({ onSubmit, onBack, loading, attemptsLeft, isRawModeSupported: isRawModeProp }: PinScreenProps): React.JSX.Element {
+function PinScreen({
+    onSubmit,
+    onBack,
+    loading,
+    attemptsLeft,
+    isRawModeSupported: isRawModeProp,
+}: PinScreenProps): React.JSX.Element {
     const [pin, setPin] = useState('');
     const { isRawModeSupported: isRawModeFromStdin } = useStdin();
     const isRawModeSupported = isRawModeProp ?? isRawModeFromStdin;
@@ -487,11 +580,14 @@ function PinScreen({ onSubmit, onBack, loading, attemptsLeft, isRawModeSupported
         }
     });
 
-    const handleSubmit = useCallback((value: string) => {
-        if (value.length >= 4 && value.length <= 12 && /^\d+$/.test(value)) {
-            onSubmit(value);
-        }
-    }, [onSubmit]);
+    const handleSubmit = useCallback(
+        (value: string) => {
+            if (value.length >= 4 && value.length <= 12 && /^\d+$/.test(value)) {
+                onSubmit(value);
+            }
+        },
+        [onSubmit]
+    );
 
     if (loading) {
         return (
@@ -509,21 +605,19 @@ function PinScreen({ onSubmit, onBack, loading, attemptsLeft, isRawModeSupported
                 {attemptsLeft !== undefined && attemptsLeft < 3 && (
                     <Box marginBottom={1}>
                         <Text color="yellow" bold>
-                            ⚠ Warning: {attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''} remaining!
+                            ⚠ Warning: {attemptsLeft} attempt{attemptsLeft !== 1 ? 's' : ''}{' '}
+                            remaining!
                         </Text>
                     </Box>
                 )}
                 <Text color="gray">Enter your 4-12 digit PIN:</Text>
                 <Text> </Text>
                 <Box>
-                    <Text color="cyan" bold>PIN: </Text>
+                    <Text color="cyan" bold>
+                        PIN:{' '}
+                    </Text>
                     {isRawModeSupported ? (
-                        <TextInput
-                            value={pin}
-                            onChange={setPin}
-                            onSubmit={handleSubmit}
-                            mask="•"
-                        />
+                        <TextInput value={pin} onChange={setPin} onSubmit={handleSubmit} mask="•" />
                     ) : (
                         <Text color="gray">(raw mode not supported)</Text>
                     )}
@@ -533,7 +627,12 @@ function PinScreen({ onSubmit, onBack, loading, attemptsLeft, isRawModeSupported
                     PIN is sent in plaintext - use only with test cards!
                 </Text>
             </CardBox>
-            <Footer hints={[{ keys: 'Enter', description: 'Submit' }, { keys: 'Esc', description: 'Back' }]} />
+            <Footer
+                hints={[
+                    { keys: 'Enter', description: 'Submit' },
+                    { keys: 'Esc', description: 'Back' },
+                ]}
+            />
         </Box>
     );
 }
@@ -545,7 +644,12 @@ interface PinResultScreenProps {
     onContinue: () => void;
 }
 
-function PinResultScreen({ success, message, attemptsLeft, onContinue }: PinResultScreenProps): React.JSX.Element {
+function PinResultScreen({
+    success,
+    message,
+    attemptsLeft,
+    onContinue,
+}: PinResultScreenProps): React.JSX.Element {
     useInput((input, key) => {
         if (key.return || input === ' ') {
             onContinue();
@@ -575,9 +679,7 @@ function PinResultScreen({ success, message, attemptsLeft, onContinue }: PinResu
                             ✗ {message}
                         </Text>
                         {attemptsLeft !== undefined && (
-                            <Text color="yellow">
-                                Attempts remaining: {attemptsLeft}
-                            </Text>
+                            <Text color="yellow">Attempts remaining: {attemptsLeft}</Text>
                         )}
                     </Box>
                 )}
@@ -609,77 +711,103 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
         }
     });
 
-    const fetchData = useCallback(async (action: string) => {
-        setLoading(true);
-        setError(null);
-        setData([]);
+    const fetchData = useCallback(
+        async (action: string) => {
+            setLoading(true);
+            setError(null);
+            setData([]);
 
-        try {
-            switch (action) {
-                case 'gpo': {
-                    const response = await emv.getProcessingOptions();
-                    if (response.isOk()) {
-                        const formatted = formatGpoResponse(response.buffer);
-                        setData([{ tag: 'GPO', name: 'GET_PROCESSING_OPTIONS', value: formatted }]);
-                    } else {
-                        setError(`GET PROCESSING OPTIONS failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
+            try {
+                switch (action) {
+                    case 'gpo': {
+                        const response = await emv.getProcessingOptions();
+                        if (response.isOk()) {
+                            const formatted = formatGpoResponse(response.buffer);
+                            setData([
+                                { tag: 'GPO', name: 'GET_PROCESSING_OPTIONS', value: formatted },
+                            ]);
+                        } else {
+                            setError(
+                                `GET PROCESSING OPTIONS failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
+                            );
+                        }
+                        break;
                     }
-                    break;
-                }
-                case 'records': {
-                    const records: { tag: string; name: string; value: string }[] = [];
-                    for (let sfi = 1; sfi <= 10; sfi++) {
-                        for (let rec = 1; rec <= 10; rec++) {
-                            const response = await emv.readRecord(sfi, rec);
-                            if (response.isOk()) {
-                                const formatted = formatTlv(response);
-                                records.push({
-                                    tag: `SFI${String(sfi)}:R${String(rec)}`,
-                                    name: 'RECORD',
-                                    value: formatted || response.buffer.toString('hex')
-                                });
-                            } else if (response.sw1 === 0x6a && response.sw2 === 0x83) {
-                                // Record not found, try next SFI
-                                break;
+                    case 'records': {
+                        const records: { tag: string; name: string; value: string }[] = [];
+                        for (let sfi = 1; sfi <= 10; sfi++) {
+                            for (let rec = 1; rec <= 10; rec++) {
+                                const response = await emv.readRecord(sfi, rec);
+                                if (response.isOk()) {
+                                    const formatted = formatTlv(response);
+                                    records.push({
+                                        tag: `SFI${String(sfi)}:R${String(rec)}`,
+                                        name: 'RECORD',
+                                        value: formatted || response.buffer.toString('hex'),
+                                    });
+                                } else if (response.sw1 === 0x6a && response.sw2 === 0x83) {
+                                    // Record not found, try next SFI
+                                    break;
+                                }
                             }
                         }
+                        if (records.length === 0) {
+                            setError('No records found');
+                        } else {
+                            setData(records);
+                        }
+                        break;
                     }
-                    if (records.length === 0) {
-                        setError('No records found');
-                    } else {
-                        setData(records);
+                    case 'pincount': {
+                        const response = await emv.getData(0x9f17);
+                        if (response.isOk()) {
+                            const tagValue = findTagInBuffer(response.buffer, 0x9f17);
+                            const count = tagValue?.[0];
+                            setData([
+                                {
+                                    tag: '9F17',
+                                    name: 'PIN_TRY_COUNT',
+                                    value: count !== undefined ? String(count) : 'Unknown',
+                                },
+                            ]);
+                        } else {
+                            setError(
+                                `PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
+                            );
+                        }
+                        break;
                     }
-                    break;
+                    case 'atc': {
+                        const response = await emv.getData(0x9f36);
+                        if (response.isOk()) {
+                            const tagValue = findTagInBuffer(response.buffer, 0x9f36);
+                            const atcValue =
+                                tagValue && tagValue.length >= 2
+                                    ? tagValue.readUInt16BE(0)
+                                    : undefined;
+                            setData([
+                                {
+                                    tag: '9F36',
+                                    name: 'APP_TRANSACTION_COUNTER',
+                                    value: atcValue !== undefined ? String(atcValue) : 'Unknown',
+                                },
+                            ]);
+                        } else {
+                            setError(
+                                `ATC not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
+                            );
+                        }
+                        break;
+                    }
                 }
-                case 'pincount': {
-                    const response = await emv.getData(0x9f17);
-                    if (response.isOk()) {
-                        const tagValue = findTagInBuffer(response.buffer, 0x9f17);
-                        const count = tagValue?.[0];
-                        setData([{ tag: '9F17', name: 'PIN_TRY_COUNT', value: count !== undefined ? String(count) : 'Unknown' }]);
-                    } else {
-                        setError(`PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
-                    }
-                    break;
-                }
-                case 'atc': {
-                    const response = await emv.getData(0x9f36);
-                    if (response.isOk()) {
-                        const tagValue = findTagInBuffer(response.buffer, 0x9f36);
-                        const atcValue = tagValue && tagValue.length >= 2 ? tagValue.readUInt16BE(0) : undefined;
-                        setData([{ tag: '9F36', name: 'APP_TRANSACTION_COUNTER', value: atcValue !== undefined ? String(atcValue) : 'Unknown' }]);
-                    } else {
-                        setError(`ATC not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`);
-                    }
-                    break;
-                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+            } finally {
+                setLoading(false);
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-        } finally {
-            setLoading(false);
-        }
-    }, [emv]);
+        },
+        [emv]
+    );
 
     const items = [
         { label: '📊  Get Processing Options', value: 'gpo' },
@@ -742,7 +870,13 @@ function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.JSX.Elem
                     }
                 />
             </CardBox>
-            <Footer hints={[{ keys: '↑↓', description: 'Navigate' }, { keys: 'Enter', description: 'Select' }, { keys: 'Esc', description: 'Back' }]} />
+            <Footer
+                hints={[
+                    { keys: '↑↓', description: 'Navigate' },
+                    { keys: 'Enter', description: 'Select' },
+                    { keys: 'Esc', description: 'Back' },
+                ]}
+            />
         </Box>
     );
 }
@@ -784,7 +918,11 @@ function App(): React.JSX.Element {
     const [atr, setAtr] = useState('');
     const [selectedApp, setSelectedApp] = useState<AppInfo | null>(null);
     const [pinLoading, setPinLoading] = useState(false);
-    const [pinResult, setPinResult] = useState<{ success: boolean; message: string; attemptsLeft?: number } | null>(null);
+    const [pinResult, setPinResult] = useState<{
+        success: boolean;
+        message: string;
+        attemptsLeft?: number;
+    } | null>(null);
     const [pinAttemptsLeft, setPinAttemptsLeft] = useState<number | undefined>(undefined);
     const [error, setError] = useState<string | null>(null);
 
@@ -852,29 +990,10 @@ function App(): React.JSX.Element {
             setEmv(emvApp);
             setAtr(card.atr?.toString('hex') ?? '');
 
-            // Read apps from PSE
-            const pseResponse = await emvApp.selectPse();
-            if (pseResponse.isOk()) {
-                const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-                const sfi = sfiData?.[0] ?? 1;
-                const appList: AppInfo[] = [];
-
-                for (let record = 1; record <= 10; record++) {
-                    const response = await emvApp.readRecord(sfi, record);
-                    if (!response.isOk()) break;
-
-                    const aid = findTagInBuffer(response.buffer, 0x4f);
-                    if (aid) {
-                        const label = findTagInBuffer(response.buffer, 0x50);
-                        const priority = findTagInBuffer(response.buffer, 0x87);
-                        appList.push({
-                            aid: aid.toString('hex'),
-                            label: label?.toString('ascii'),
-                            priority: priority?.[0],
-                        });
-                    }
-                }
-                setApps(appList);
+            // Use the discoverApplications method to read apps from PSE
+            const result = await emvApp.discoverApplications();
+            if (result.success) {
+                setApps(result.apps);
             }
             setLoading(false);
         } catch (err) {
@@ -885,97 +1004,115 @@ function App(): React.JSX.Element {
     }, []);
 
     // Handle reader selection
-    const handleReaderSelect = useCallback((reader: ReaderInfo) => {
-        setSelectedReader(reader);
-        // Clear previous state when selecting a new reader
-        setApps([]);
-        setEmv(null);
-        setAtr('');
-        const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
+    const handleReaderSelect = useCallback(
+        (reader: ReaderInfo) => {
+            setSelectedReader(reader);
+            // Clear previous state when selecting a new reader
+            setApps([]);
+            setEmv(null);
+            setAtr('');
+            const hasCard = (reader.state & SCARD_STATE_PRESENT) !== 0;
 
-        if (hasCard && devices) {
-            // Get the already-connected card directly from the library
-            const card = devices.getCard(reader.name);
-            if (card) {
-                void readAppsFromCard(reader.name, card);
+            if (hasCard && devices) {
+                // Get the already-connected card directly from the library
+                const card = devices.getCard(reader.name);
+                if (card) {
+                    void readAppsFromCard(reader.name, card);
+                } else {
+                    // Card present but not yet connected - wait for card-inserted event
+                    setLoading(true);
+                    setScreen('apps');
+
+                    const handleCardInserted = (event: unknown): void => {
+                        const cardEvent = event as CardInsertedEvent;
+                        if (cardEvent.reader.name === reader.name) {
+                            devices.off('card-inserted', handleCardInserted);
+                            void readAppsFromCard(reader.name, cardEvent.card);
+                        }
+                    };
+                    devices.on('card-inserted', handleCardInserted);
+                }
             } else {
-                // Card present but not yet connected - wait for card-inserted event
-                setLoading(true);
-                setScreen('apps');
+                // Wait for card insertion
+                setScreen('waiting');
 
-                const handleCardInserted = (event: unknown): void => {
-                    const cardEvent = event as CardInsertedEvent;
-                    if (cardEvent.reader.name === reader.name) {
-                        devices.off('card-inserted', handleCardInserted);
-                        void readAppsFromCard(reader.name, cardEvent.card);
-                    }
-                };
-                devices.on('card-inserted', handleCardInserted);
+                if (devices) {
+                    const handleCardInserted = (event: unknown): void => {
+                        const cardEvent = event as CardInsertedEvent;
+                        if (cardEvent.reader.name === reader.name) {
+                            devices.off('card-inserted', handleCardInserted);
+                            void readAppsFromCard(reader.name, cardEvent.card);
+                        }
+                    };
+                    devices.on('card-inserted', handleCardInserted);
+                }
             }
-        } else {
-            // Wait for card insertion
-            setScreen('waiting');
-
-            if (devices) {
-                const handleCardInserted = (event: unknown): void => {
-                    const cardEvent = event as CardInsertedEvent;
-                    if (cardEvent.reader.name === reader.name) {
-                        devices.off('card-inserted', handleCardInserted);
-                        void readAppsFromCard(reader.name, cardEvent.card);
-                    }
-                };
-                devices.on('card-inserted', handleCardInserted);
-            }
-        }
-    }, [devices, readAppsFromCard]);
+        },
+        [devices, readAppsFromCard]
+    );
 
     // Handle app selection
-    const handleAppSelect = useCallback(async (app: AppInfo) => {
-        if (!emv) return;
+    const handleAppSelect = useCallback(
+        async (app: AppInfo) => {
+            if (!emv) return;
 
-        setSelectedApp(app);
-        setLoading(true);
+            setSelectedApp(app);
+            setLoading(true);
 
-        try {
-            const aidBuffer = Buffer.from(app.aid, 'hex');
-            await emv.selectApplication(aidBuffer);
-            setScreen('selected');
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
-            setScreen('error');
-        } finally {
-            setLoading(false);
-        }
-    }, [emv]);
+            try {
+                const aidBuffer = Buffer.from(app.aid, 'hex');
+                await emv.selectApplication(aidBuffer);
+                setScreen('selected');
+            } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+                setScreen('error');
+            } finally {
+                setLoading(false);
+            }
+        },
+        [emv]
+    );
 
     // Handle PIN verification
-    const handlePinSubmit = useCallback(async (pin: string) => {
-        if (!emv) return;
+    const handlePinSubmit = useCallback(
+        async (pin: string) => {
+            if (!emv) return;
 
-        setPinLoading(true);
+            setPinLoading(true);
 
-        try {
-            const response = await emv.verifyPin(pin);
+            try {
+                const response = await emv.verifyPin(pin);
 
-            if (response.isOk()) {
-                setPinResult({ success: true, message: 'PIN verified successfully!' });
-            } else if (response.sw1 === 0x63 && (response.sw2 & 0xf0) === 0xc0) {
-                const attempts = response.sw2 & 0x0f;
-                setPinAttemptsLeft(attempts);
-                setPinResult({ success: false, message: 'Wrong PIN.', attemptsLeft: attempts });
-            } else if (response.sw1 === 0x69 && response.sw2 === 0x83) {
-                setPinResult({ success: false, message: 'PIN is blocked! Card cannot be used.' });
-            } else {
-                setPinResult({ success: false, message: `Verification failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}` });
+                if (response.isOk()) {
+                    setPinResult({ success: true, message: 'PIN verified successfully!' });
+                } else if (response.sw1 === 0x63 && (response.sw2 & 0xf0) === 0xc0) {
+                    const attempts = response.sw2 & 0x0f;
+                    setPinAttemptsLeft(attempts);
+                    setPinResult({ success: false, message: 'Wrong PIN.', attemptsLeft: attempts });
+                } else if (response.sw1 === 0x69 && response.sw2 === 0x83) {
+                    setPinResult({
+                        success: false,
+                        message: 'PIN is blocked! Card cannot be used.',
+                    });
+                } else {
+                    setPinResult({
+                        success: false,
+                        message: `Verification failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`,
+                    });
+                }
+                setScreen('pin-result');
+            } catch (err) {
+                setPinResult({
+                    success: false,
+                    message: err instanceof Error ? err.message : String(err),
+                });
+                setScreen('pin-result');
+            } finally {
+                setPinLoading(false);
             }
-            setScreen('pin-result');
-        } catch (err) {
-            setPinResult({ success: false, message: err instanceof Error ? err.message : String(err) });
-            setScreen('pin-result');
-        } finally {
-            setPinLoading(false);
-        }
-    }, [emv]);
+        },
+        [emv]
+    );
 
     // Render current screen
     switch (screen) {
@@ -1009,7 +1146,9 @@ function App(): React.JSX.Element {
                     readerName={selectedReader?.name ?? 'Unknown'}
                     atr={atr}
                     onSelect={(app) => void handleAppSelect(app)}
-                    onBack={() => { setScreen('readers'); }}
+                    onBack={() => {
+                        setScreen('readers');
+                    }}
                     loading={loading}
                 />
             );
@@ -1018,19 +1157,32 @@ function App(): React.JSX.Element {
             return selectedApp ? (
                 <SelectedAppScreen
                     app={selectedApp}
-                    onVerifyPin={() => { setScreen('pin'); }}
-                    onExplore={() => { setScreen('explore'); }}
-                    onBack={() => { setScreen('apps'); }}
+                    onVerifyPin={() => {
+                        setScreen('pin');
+                    }}
+                    onExplore={() => {
+                        setScreen('explore');
+                    }}
+                    onBack={() => {
+                        setScreen('apps');
+                    }}
                 />
             ) : (
-                <ErrorScreen message="No app selected" onBack={() => { setScreen('apps'); }} />
+                <ErrorScreen
+                    message="No app selected"
+                    onBack={() => {
+                        setScreen('apps');
+                    }}
+                />
             );
 
         case 'pin':
             return (
                 <PinScreen
                     onSubmit={(pin) => void handlePinSubmit(pin)}
-                    onBack={() => { setScreen('selected'); }}
+                    onBack={() => {
+                        setScreen('selected');
+                    }}
                     loading={pinLoading}
                     attemptsLeft={pinAttemptsLeft}
                 />
@@ -1042,24 +1194,56 @@ function App(): React.JSX.Element {
                     success={pinResult.success}
                     message={pinResult.message}
                     attemptsLeft={pinResult.attemptsLeft}
-                    onContinue={() => { setScreen('selected'); }}
+                    onContinue={() => {
+                        setScreen('selected');
+                    }}
                 />
             ) : (
-                <ErrorScreen message="No result" onBack={() => { setScreen('selected'); }} />
+                <ErrorScreen
+                    message="No result"
+                    onBack={() => {
+                        setScreen('selected');
+                    }}
+                />
             );
 
         case 'explore':
             return emv && selectedApp ? (
-                <ExploreScreen emv={emv} app={selectedApp} onBack={() => { setScreen('selected'); }} />
+                <ExploreScreen
+                    emv={emv}
+                    app={selectedApp}
+                    onBack={() => {
+                        setScreen('selected');
+                    }}
+                />
             ) : (
-                <ErrorScreen message="No EMV connection" onBack={() => { setScreen('selected'); }} />
+                <ErrorScreen
+                    message="No EMV connection"
+                    onBack={() => {
+                        setScreen('selected');
+                    }}
+                />
             );
 
         case 'error':
-            return <ErrorScreen message={error ?? 'Unknown error'} onBack={() => { setScreen('readers'); }} />;
+            return (
+                <ErrorScreen
+                    message={error ?? 'Unknown error'}
+                    onBack={() => {
+                        setScreen('readers');
+                    }}
+                />
+            );
 
         default:
-            return <ErrorScreen message="Unknown screen" onBack={() => { setScreen('welcome'); }} />;
+            return (
+                <ErrorScreen
+                    message="Unknown screen"
+                    onBack={() => {
+                        setScreen('welcome');
+                    }}
+                />
+            );
     }
 }
 

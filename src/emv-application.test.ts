@@ -726,6 +726,83 @@ describe('EmvApplication', () => {
         });
     });
 
+    describe('discoverApplications', () => {
+        it('should discover applications from PSE', async () => {
+            let callCount = 0;
+            mockCard.transmit = async () => {
+                callCount++;
+                if (callCount === 1) {
+                    // PSE response with SFI = 1
+                    return Buffer.from([
+                        0x6f, 0x15, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53,
+                        0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0xa5, 0x03, 0x88, 0x01, 0x01, 0x90,
+                        0x00,
+                    ]);
+                } else if (callCount === 2) {
+                    // Record with AID and label
+                    return Buffer.from([
+                        0x70, 0x15, 0x61, 0x13, 0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10,
+                        0x10, 0x50, 0x04, 0x56, 0x49, 0x53, 0x41, 0x87, 0x01, 0x01, 0x90, 0x00,
+                    ]);
+                }
+                // End of records
+                return Buffer.from([0x6a, 0x83]);
+            };
+
+            const result = await emv.discoverApplications();
+
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.apps.length, 1);
+            assert.strictEqual(result.apps[0]?.aid, 'a0000000041010');
+            assert.strictEqual(result.apps[0]?.label, 'VISA');
+            assert.strictEqual(result.apps[0]?.priority, 1);
+            assert.strictEqual(result.sfi, 1);
+        });
+
+        it('should return empty apps when PSE fails', async () => {
+            mockCard.transmit = async () => Buffer.from([0x6a, 0x82]);
+
+            const result = await emv.discoverApplications();
+
+            assert.strictEqual(result.success, false);
+            assert.strictEqual(result.apps.length, 0);
+        });
+
+        it('should handle cards with multiple applications', async () => {
+            let callCount = 0;
+            mockCard.transmit = async () => {
+                callCount++;
+                if (callCount === 1) {
+                    // PSE response
+                    return Buffer.from([
+                        0x6f, 0x15, 0x84, 0x0e, 0x31, 0x50, 0x41, 0x59, 0x2e, 0x53, 0x59, 0x53,
+                        0x2e, 0x44, 0x44, 0x46, 0x30, 0x31, 0xa5, 0x03, 0x88, 0x01, 0x01, 0x90,
+                        0x00,
+                    ]);
+                } else if (callCount === 2) {
+                    // First app: Visa
+                    return Buffer.from([
+                        0x70, 0x12, 0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10, 0x50,
+                        0x04, 0x56, 0x49, 0x53, 0x41, 0x90, 0x00,
+                    ]);
+                } else if (callCount === 3) {
+                    // Second app: Mastercard
+                    return Buffer.from([
+                        0x70, 0x16, 0x4f, 0x07, 0xa0, 0x00, 0x00, 0x00, 0x04, 0x10, 0x10, 0x50,
+                        0x0a, 0x4d, 0x61, 0x73, 0x74, 0x65, 0x72, 0x63, 0x61, 0x72, 0x64, 0x90,
+                        0x00,
+                    ]);
+                }
+                return Buffer.from([0x6a, 0x83]);
+            };
+
+            const result = await emv.discoverApplications();
+
+            assert.strictEqual(result.success, true);
+            assert.strictEqual(result.apps.length, 2);
+        });
+    });
+
     describe('parsePdol', async () => {
         const { parsePdol } = await import('./emv-application.js');
 

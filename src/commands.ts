@@ -4,6 +4,7 @@
 
 import { findTagInBuffer } from './emv-tags.js';
 import type { CardResponse } from './types.js';
+import type { DiscoveredApp, DiscoverAppsResult } from './emv-application.js';
 
 const SCARD_STATE_PRESENT = 0x20;
 
@@ -66,6 +67,7 @@ interface EmvLike {
     verifyPin?(pin: string): Promise<CardResponse>;
     getAtr?(): string;
     getReaderName?(): string;
+    discoverApplications?(): Promise<DiscoverAppsResult>;
 }
 
 /**
@@ -294,58 +296,97 @@ export interface PseReadResult {
 
 /**
  * Read applications from Payment System Environment
- * This is a shared helper used by listApps, cardInfo, and dumpCard
+ * This is a shared helper used by listApps, cardInfo, and dumpCard.
+ * Uses EmvApplication.discoverApplications() for app discovery, with additional
+ * record reading for dump functionality.
  */
 export async function readPseApplications(options: CommandOptions = {}): Promise<PseReadResult> {
     const emv = options.emv;
-    if (!emv?.selectPse || !emv.readRecord) {
+    if (!emv?.discoverApplications) {
+        // Fallback for mocks without discoverApplications
+        if (!emv?.selectPse || !emv.readRecord) {
+            return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
+        }
+
+        // Use the old implementation for backward compatibility with tests
+        const pseResponse = await emv.selectPse();
+        if (!pseResponse.isOk()) {
+            return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
+        }
+
+        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
+        const sfi = sfiData?.[0] ?? 1;
+
+        const apps: PseAppInfo[] = [];
+        const records: PseRecordData[] = [];
+
+        for (let record = 1; record <= 10; record++) {
+            const response = await emv.readRecord(sfi, record);
+            if (!response.isOk()) break;
+
+            records.push({
+                sfi,
+                record,
+                data: response.buffer.toString('hex'),
+            });
+
+            const aid = findTagInBuffer(response.buffer, 0x4f);
+            if (aid) {
+                const label = findTagInBuffer(response.buffer, 0x50);
+                const priority = findTagInBuffer(response.buffer, 0x87);
+
+                apps.push({
+                    aid: aid.toString('hex'),
+                    label: label?.toString('ascii'),
+                    priority: priority?.[0],
+                });
+            }
+        }
+
+        return { pseOk: true, pseBuffer: pseResponse.buffer, sfi, apps, records };
+    }
+
+    // Use the new discoverApplications method
+    const result = await emv.discoverApplications();
+    if (!result.success) {
         return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
     }
 
-    const pseResponse = await emv.selectPse();
-    if (!pseResponse.isOk()) {
-        return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
-    }
+    // Convert DiscoveredApp to PseAppInfo (they have the same shape)
+    const apps: PseAppInfo[] = result.apps.map((app: DiscoveredApp) => ({
+        aid: app.aid,
+        label: app.label,
+        priority: app.priority,
+    }));
 
-    const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-    const sfi = sfiData?.[0] ?? 1;
-
-    const apps: PseAppInfo[] = [];
+    // For dump functionality, we need to re-read records to get raw data
+    // The discoverApplications method doesn't expose raw records
     const records: PseRecordData[] = [];
-
-    for (let record = 1; record <= 10; record++) {
-        const response = await emv.readRecord(sfi, record);
-        if (!response.isOk()) break;
-
-        records.push({
-            sfi,
-            record,
-            data: response.buffer.toString('hex'),
-        });
-
-        const aid = findTagInBuffer(response.buffer, 0x4f);
-        if (aid) {
-            const label = findTagInBuffer(response.buffer, 0x50);
-            const priority = findTagInBuffer(response.buffer, 0x87);
-
-            apps.push({
-                aid: aid.toString('hex'),
-                label: label?.toString('ascii'),
-                priority: priority?.[0],
+    if (emv.readRecord) {
+        for (let record = 1; record <= 10; record++) {
+            const response = await emv.readRecord(result.sfi, record);
+            if (!response.isOk()) break;
+            records.push({
+                sfi: result.sfi,
+                record,
+                data: response.buffer.toString('hex'),
             });
         }
     }
 
-    return { pseOk: true, pseBuffer: pseResponse.buffer, sfi, apps, records };
+    return {
+        pseOk: true,
+        pseBuffer: result.pseBuffer ?? Buffer.alloc(0),
+        sfi: result.sfi,
+        apps,
+        records,
+    };
 }
 
 /**
  * List applications on card from PSE
  */
-export async function listApps(
-    ctx: CommandContext,
-    options: CommandOptions = {}
-): Promise<number> {
+export async function listApps(ctx: CommandContext, options: CommandOptions = {}): Promise<number> {
     const result = await readPseApplications(options);
 
     if (!result.pseOk) {
@@ -362,7 +403,8 @@ export async function listApps(
 
     for (const app of result.apps) {
         const labelStr = app.label ? ` - ${app.label}` : '';
-        const priorityStr = app.priority !== undefined ? ` (priority: ${String(app.priority)})` : '';
+        const priorityStr =
+            app.priority !== undefined ? ` (priority: ${String(app.priority)})` : '';
         ctx.output(`  ${app.aid}${labelStr}${priorityStr}`);
     }
 
@@ -497,10 +539,7 @@ export async function verifyPin(
 /**
  * Show card information
  */
-export async function cardInfo(
-    ctx: CommandContext,
-    options: CommandOptions = {}
-): Promise<number> {
+export async function cardInfo(ctx: CommandContext, options: CommandOptions = {}): Promise<number> {
     const emv = options.emv;
     if (!emv?.getAtr || !emv.getReaderName) {
         ctx.error('EMV application not available');
@@ -544,10 +583,7 @@ export async function cardInfo(
 /**
  * Dump all readable data from card
  */
-export async function dumpCard(
-    ctx: CommandContext,
-    options: CommandOptions = {}
-): Promise<number> {
+export async function dumpCard(ctx: CommandContext, options: CommandOptions = {}): Promise<number> {
     const emv = options.emv;
     if (!emv?.getAtr) {
         ctx.error('EMV application not available');

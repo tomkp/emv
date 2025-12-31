@@ -24,6 +24,8 @@ export type {
     CvmRule,
     CvmList,
     CvmContext,
+    DiscoveredApp,
+    DiscoverAppsResult,
 } from './emv-application.js';
 export {
     EMV_TAGS,
