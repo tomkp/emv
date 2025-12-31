@@ -1204,6 +1204,24 @@ describe('EmvApplication', () => {
             assert.strictEqual(result >> 4, 3, 'High nibble should be 3');
             assert.strictEqual(result & 0x0f, 1, 'Low nibble should be 1');
         });
+
+        it('should throw TypeError for empty string', () => {
+            assert.throws(() => stringToBcd(''), TypeError);
+        });
+
+        it('should throw TypeError for single character', () => {
+            assert.throws(() => stringToBcd('5'), TypeError);
+        });
+
+        it('should throw TypeError for string longer than 2 characters', () => {
+            assert.throws(() => stringToBcd('123'), TypeError);
+        });
+
+        it('should throw TypeError for non-digit characters', () => {
+            assert.throws(() => stringToBcd('ab'), TypeError);
+            assert.throws(() => stringToBcd('1a'), TypeError);
+            assert.throws(() => stringToBcd('a1'), TypeError);
+        });
     });
 
     describe('parseGpoResponseBuffer', async () => {
@@ -1250,6 +1268,22 @@ describe('EmvApplication', () => {
             assert.strictEqual(result.aip, undefined);
             assert.strictEqual(result.afl.length, 0);
         });
+
+        it('should handle truncated Format 1 buffer gracefully', () => {
+            // Buffer says len=6 but only has 1 byte of data after header
+            const buffer = Buffer.from([0x80, 0x06, 0x1c]);
+            const result = parseGpoResponseBuffer(buffer);
+            assert.strictEqual(result.aip, undefined);
+            assert.strictEqual(result.afl.length, 0);
+        });
+
+        it('should handle Format 1 buffer too short for AIP', () => {
+            // Buffer has length byte but not enough data for 2-byte AIP
+            const buffer = Buffer.from([0x80, 0x02, 0x1c]);
+            const result = parseGpoResponseBuffer(buffer);
+            assert.strictEqual(result.aip, undefined);
+            assert.strictEqual(result.afl.length, 0);
+        });
     });
 
     describe('parseGenerateAcResponse', async () => {
@@ -1289,6 +1323,16 @@ describe('EmvApplication', () => {
             const result = parseGenerateAcResponse(buffer);
             assert.strictEqual(result.cryptogramType, undefined);
             assert.strictEqual(result.cryptogram, undefined);
+            assert.strictEqual(result.atc, undefined);
+        });
+
+        it('should return undefined atc for truncated ATC buffer (1 byte)', () => {
+            // 77 len [9F27 01 80] [9F36 01 00] - ATC has only 1 byte instead of 2
+            const buffer = Buffer.from([
+                0x77, 0x08, 0x9f, 0x27, 0x01, 0x80, 0x9f, 0x36, 0x01, 0x00,
+            ]);
+            const result = parseGenerateAcResponse(buffer);
+            assert.strictEqual(result.cryptogramType, 'ARQC');
             assert.strictEqual(result.atc, undefined);
         });
     });
