@@ -467,7 +467,7 @@ function SelectedAppScreen({ app, onVerifyPin, onExplore, onBack }: SelectedAppS
     );
 }
 
-interface PinScreenProps {
+export interface PinScreenProps {
     onSubmit: (pin: string) => void;
     onBack: () => void;
     loading: boolean;
@@ -1067,6 +1067,9 @@ function App(): React.JSX.Element {
 export function runInteractive(): void {
     render(<App />);
 }
+
+// Export for testing
+export { PinScreen };
 
 // Run if executed directly
 const isMainModule = process.argv[1]?.endsWith('interactive.js') ?? false;

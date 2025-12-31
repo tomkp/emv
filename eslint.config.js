@@ -27,11 +27,12 @@ export default tseslint.config(
         },
     },
     {
-        files: ['src/**/*.test.ts'],
+        files: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
         rules: {
             '@typescript-eslint/no-floating-promises': 'off',
             '@typescript-eslint/require-await': 'off',
             '@typescript-eslint/no-unnecessary-condition': 'off',
+            '@typescript-eslint/restrict-template-expressions': 'off',
         },
     },
     {
