@@ -472,11 +472,14 @@ export interface PinScreenProps {
     onBack: () => void;
     loading: boolean;
     attemptsLeft: number | undefined;
+    /** Override raw mode detection for testing. If not provided, uses useStdin() hook. */
+    isRawModeSupported?: boolean;
 }
 
-function PinScreen({ onSubmit, onBack, loading, attemptsLeft }: PinScreenProps): React.JSX.Element {
+function PinScreen({ onSubmit, onBack, loading, attemptsLeft, isRawModeSupported: isRawModeProp }: PinScreenProps): React.JSX.Element {
     const [pin, setPin] = useState('');
-    const { isRawModeSupported } = useStdin();
+    const { isRawModeSupported: isRawModeFromStdin } = useStdin();
+    const isRawModeSupported = isRawModeProp ?? isRawModeFromStdin;
 
     useInput((_input, key) => {
         if (key.escape) {

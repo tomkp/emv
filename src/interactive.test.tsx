@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
+import { PinScreen } from './interactive.js';
 
 describe('Interactive CLI', () => {
     describe('module exports', () => {
@@ -16,12 +17,76 @@ describe('Interactive CLI', () => {
             const module = await import('./interactive.js');
             assert.strictEqual(typeof module.PinScreen, 'function');
         });
+    });
 
-        it('should export PinScreenProps type', async () => {
-            // TypeScript will validate this at compile time
-            // This test just ensures the export exists
-            const module = await import('./interactive.js');
-            assert.ok(module.PinScreen !== undefined);
+    describe('PinScreen', () => {
+        const noop = () => {};
+
+        it('should render PIN input when raw mode is supported', () => {
+            const { lastFrame, unmount } = render(
+                <PinScreen
+                    onSubmit={noop}
+                    onBack={noop}
+                    loading={false}
+                    attemptsLeft={3}
+                    isRawModeSupported={true}
+                />
+            );
+
+            const frame = lastFrame() ?? '';
+            unmount();
+
+            // Should show PIN input field (not the fallback message)
+            assert.ok(frame.includes('PIN:'), 'Should display PIN label');
+            assert.ok(!frame.includes('raw mode not supported'), 'Should not show raw mode fallback');
+        });
+
+        it('should show fallback message when raw mode is not supported', () => {
+            const { lastFrame, unmount } = render(
+                <PinScreen
+                    onSubmit={noop}
+                    onBack={noop}
+                    loading={false}
+                    attemptsLeft={3}
+                    isRawModeSupported={false}
+                />
+            );
+
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('raw mode not supported'), 'Should show raw mode not supported message');
+        });
+
+        it('should show loading state', () => {
+            const { lastFrame, unmount } = render(
+                <PinScreen
+                    onSubmit={noop}
+                    onBack={noop}
+                    loading={true}
+                    attemptsLeft={3}
+                    isRawModeSupported={true}
+                />
+            );
+
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('Verifying PIN'), 'Should show verifying message when loading');
+        });
+
+        it('should show warning when attempts are low', () => {
+            const { lastFrame, unmount } = render(
+                <PinScreen
+                    onSubmit={noop}
+                    onBack={noop}
+                    loading={false}
+                    attemptsLeft={1}
+                    isRawModeSupported={true}
+                />
+            );
+
+            const frame = lastFrame() ?? '';
+            unmount();
+            assert.ok(frame.includes('1 attempt'), 'Should show attempts remaining warning');
         });
     });
 
