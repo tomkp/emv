@@ -176,6 +176,32 @@ export interface CvmContext {
 }
 
 /**
+ * Information about a discovered application from PSE/PPSE
+ */
+export interface DiscoveredApp {
+    /** Application Identifier (AID) as hex string */
+    aid: string;
+    /** Application label (human-readable name) */
+    label?: string | undefined;
+    /** Application priority indicator */
+    priority?: number | undefined;
+}
+
+/**
+ * Result from discovering applications via PSE/PPSE
+ */
+export interface DiscoverAppsResult {
+    /** Whether the PSE/PPSE selection succeeded */
+    success: boolean;
+    /** List of discovered applications */
+    apps: DiscoveredApp[];
+    /** SFI used for reading records */
+    sfi: number;
+    /** Raw PSE/PPSE response buffer */
+    pseBuffer?: Buffer | undefined;
+}
+
+/**
  * Payment System Environment (PSE) identifier for contact cards
  * "1PAY.SYS.DDF01" encoded as bytes
  */
@@ -891,6 +917,41 @@ export class EmvApplication {
         }
 
         return records;
+    }
+
+    /**
+     * Discover payment applications on the card via PSE (Payment System Environment).
+     * This reads the PSE directory and extracts information about available applications.
+     *
+     * @returns Result containing list of discovered applications
+     */
+    async discoverApplications(): Promise<DiscoverAppsResult> {
+        const pseResponse = await this.selectPse();
+        if (!pseResponse.isOk()) {
+            return { success: false, apps: [], sfi: 1 };
+        }
+
+        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
+        const sfi = sfiData?.[0] ?? 1;
+        const apps: DiscoveredApp[] = [];
+
+        for (let record = 1; record <= 10; record++) {
+            const response = await this.readRecord(sfi, record);
+            if (!response.isOk()) break;
+
+            const aid = findTagInBuffer(response.buffer, 0x4f);
+            if (aid) {
+                const label = findTagInBuffer(response.buffer, 0x50);
+                const priority = findTagInBuffer(response.buffer, 0x87);
+                apps.push({
+                    aid: aid.toString('hex'),
+                    label: label?.toString('ascii'),
+                    priority: priority?.[0],
+                });
+            }
+        }
+
+        return { success: true, apps, sfi, pseBuffer: pseResponse.buffer };
     }
 
     /**
