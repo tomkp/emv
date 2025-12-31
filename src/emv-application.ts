@@ -394,6 +394,10 @@ export function parseGpoResponseBuffer(buffer: Buffer): GpoResult {
         if (len === undefined || len < 2) {
             return { aip: undefined, afl: [] };
         }
+        // Validate buffer has enough data for header + len bytes (at least 4 for AIP)
+        if (buffer.length < 4 || buffer.length < 2 + len) {
+            return { aip: undefined, afl: [] };
+        }
         const aip = buffer.subarray(2, 4);
         const aflBuffer = buffer.subarray(4, 2 + len);
         return { aip, afl: parseAfl(aflBuffer) };
@@ -797,12 +801,19 @@ function amountToBcd(amount: number): Buffer {
 }
 
 /**
- * Convert a 2-character decimal string to a BCD byte.
- * Each character becomes a nibble: "25" -> 0x25 (high nibble 2, low nibble 5)
+ * Convert a 2-character decimal string to a single BCD byte.
+ *
+ * Each character becomes one nibble: e.g. "25" -> 0x25 (high nibble 2, low nibble 5).
+ *
+ * @param str - A 2-character string containing decimal digits ("0"-"9")
+ * @throws TypeError if input is not exactly 2 decimal digits
  */
 export function stringToBcd(str: string): number {
-    const high = parseInt(str[0] ?? '0', 10);
-    const low = parseInt(str[1] ?? '0', 10);
+    if (!/^[0-9]{2}$/.test(str)) {
+        throw new TypeError(`stringToBcd expected a 2-digit decimal string, got "${str}"`);
+    }
+    const high = parseInt(str.charAt(0), 10);
+    const low = parseInt(str.charAt(1), 10);
     return (high << 4) | low;
 }
 
