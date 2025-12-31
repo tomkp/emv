@@ -23,12 +23,14 @@
     "scripts": {
         "build": "tsc",
         "clean": "rm -rf dist coverage",
+        "typecheck": "tsc --noEmit",
         "lint": "eslint src/",
         "lint:fix": "eslint src/ --fix",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "test": "node --test dist/*.test.js",
         "test:coverage": "node --test --experimental-test-coverage dist/*.test.js",
+        "checks": "npm run typecheck && npm run lint && npm run format && npm run test",
         "pretest": "npm run build",
         "prepublishOnly": "npm run clean && npm run lint && npm run build && npm run test"
     },
