@@ -12,6 +12,7 @@ import { AppsScreen } from './interactive/screens/AppsScreen.js';
 import { SelectedAppScreen } from './interactive/screens/SelectedAppScreen.js';
 import { PinResultScreen } from './interactive/screens/PinResultScreen.js';
 import { ErrorScreen } from './interactive/screens/ErrorScreen.js';
+import { Header } from './interactive/components/Header.js';
 
 describe('Interactive CLI', () => {
     describe('module exports', () => {
@@ -277,6 +278,45 @@ describe('Interactive CLI', () => {
             const frame = lastFrame() ?? '';
             unmount();
             assert.ok(frame.includes('Something broke'));
+        });
+    });
+
+    describe('Header', () => {
+        it('should render ASCII art with correct EMV letter spacing and border', () => {
+            const { lastFrame, unmount } = render(<Header />);
+            const frame = lastFrame() ?? '';
+            unmount();
+
+            // These exact strings define the EMV ASCII art structure with borders
+            // The spaces are critical for proper letter alignment
+            // prettier-ignore
+            const expectedAsciiPatterns = [
+                '║  ███████╗███╗   ███╗██╗   ██╗                                 ║', // Row 1
+                '║  ██╔════╝████╗ ████║██║   ██║', // Row 2 (has title text after)
+                '║  █████╗  ██╔████╔██║██║   ██║', // Row 3 (has title text after)
+                '║  ██╔══╝  ██║╚██╔╝██║╚██╗ ██╔╝                                 ║', // Row 4
+                '║  ███████╗██║ ╚═╝ ██║ ╚████╔╝', // Row 5 (has version after)
+                '║  ╚══════╝╚═╝     ╚═╝  ╚═══╝                                   ║', // Row 6
+            ];
+
+            for (const pattern of expectedAsciiPatterns) {
+                assert.ok(
+                    frame.includes(pattern),
+                    `ASCII art is malformed - missing pattern: "${pattern}". ` +
+                        'The spacing in the EMV logo has been corrupted.'
+                );
+            }
+        });
+
+        it('should render title text', () => {
+            const { lastFrame, unmount } = render(<Header />);
+            const frame = lastFrame() ?? '';
+            unmount();
+
+            assert.ok(frame.includes('Chip'), 'Should include "Chip" in title');
+            assert.ok(frame.includes('PIN'), 'Should include "PIN" in title');
+            assert.ok(frame.includes('Explorer'), 'Should include "Explorer" in title');
+            assert.ok(frame.includes('Interactive Mode'), 'Should include "Interactive Mode"');
         });
     });
 
