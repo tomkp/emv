@@ -1205,4 +1205,91 @@ describe('EmvApplication', () => {
             assert.strictEqual(result & 0x0f, 1, 'Low nibble should be 1');
         });
     });
+
+    describe('parseGpoResponseBuffer', async () => {
+        const { parseGpoResponseBuffer } = await import('./emv-application.js');
+
+        it('should parse Format 1 (tag 80) GPO response', () => {
+            // Format 1: 80 len AIP(2) AFL(4)
+            // AIP: 1C00, AFL: SFI 1 records 1-1
+            const buffer = Buffer.from([0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00]);
+            const result = parseGpoResponseBuffer(buffer);
+
+            assert.ok(result.aip);
+            assert.strictEqual(result.aip.toString('hex'), '1c00');
+            assert.strictEqual(result.afl.length, 1);
+            assert.strictEqual(result.afl[0]?.sfi, 1);
+            assert.strictEqual(result.afl[0]?.firstRecord, 1);
+            assert.strictEqual(result.afl[0]?.lastRecord, 1);
+        });
+
+        it('should parse Format 2 (tag 77) GPO response', () => {
+            // Format 2: 77 len [82 02 AIP] [94 04 AFL]
+            const buffer = Buffer.from([
+                0x77, 0x0a, 0x82, 0x02, 0x3c, 0x00, 0x94, 0x04, 0x08, 0x01, 0x02, 0x01,
+            ]);
+            const result = parseGpoResponseBuffer(buffer);
+
+            assert.ok(result.aip);
+            assert.strictEqual(result.aip.toString('hex'), '3c00');
+            assert.strictEqual(result.afl.length, 1);
+            assert.strictEqual(result.afl[0]?.sfi, 1);
+            assert.strictEqual(result.afl[0]?.firstRecord, 1);
+            assert.strictEqual(result.afl[0]?.lastRecord, 2);
+        });
+
+        it('should return empty result for empty buffer', () => {
+            const result = parseGpoResponseBuffer(Buffer.alloc(0));
+            assert.strictEqual(result.aip, undefined);
+            assert.strictEqual(result.afl.length, 0);
+        });
+
+        it('should return empty result for unknown format', () => {
+            const buffer = Buffer.from([0x99, 0x02, 0x12, 0x34]);
+            const result = parseGpoResponseBuffer(buffer);
+            assert.strictEqual(result.aip, undefined);
+            assert.strictEqual(result.afl.length, 0);
+        });
+    });
+
+    describe('parseGenerateAcResponse', async () => {
+        const { parseGenerateAcResponse } = await import('./emv-application.js');
+
+        it('should parse ARQC response', () => {
+            // 77 len [9F27 01 80] [9F36 02 00 01] [9F26 08 cryptogram]
+            // Length = 4 + 5 + 11 = 20 = 0x14
+            const buffer = Buffer.from([
+                0x77, 0x14, 0x9f, 0x27, 0x01, 0x80, 0x9f, 0x36, 0x02, 0x00, 0x01, 0x9f,
+                0x26, 0x08, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+            ]);
+            const result = parseGenerateAcResponse(buffer);
+
+            assert.strictEqual(result.cryptogramType, 'ARQC');
+            assert.ok(result.cryptogram);
+            assert.strictEqual(result.cryptogram.toString('hex'), '1122334455667788');
+            assert.strictEqual(result.atc, 1);
+        });
+
+        it('should parse TC response', () => {
+            // 77 len [9F27 01 40 (TC)]
+            const buffer = Buffer.from([0x77, 0x04, 0x9f, 0x27, 0x01, 0x40]);
+            const result = parseGenerateAcResponse(buffer);
+            assert.strictEqual(result.cryptogramType, 'TC');
+        });
+
+        it('should parse AAC response', () => {
+            // 77 len [9F27 01 00 (AAC)]
+            const buffer = Buffer.from([0x77, 0x04, 0x9f, 0x27, 0x01, 0x00]);
+            const result = parseGenerateAcResponse(buffer);
+            assert.strictEqual(result.cryptogramType, 'AAC');
+        });
+
+        it('should return undefined values for empty buffer', () => {
+            const buffer = Buffer.alloc(0);
+            const result = parseGenerateAcResponse(buffer);
+            assert.strictEqual(result.cryptogramType, undefined);
+            assert.strictEqual(result.cryptogram, undefined);
+            assert.strictEqual(result.atc, undefined);
+        });
+    });
 });
