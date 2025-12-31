@@ -55,9 +55,6 @@
     "homepage": "https://github.com/tomkp/emv",
     "dependencies": {
         "@tomkp/ber-tlv": "^1.0.1",
-        "boxen": "^5.1.2",
-        "chalk": "^4.1.2",
-        "figures": "^3.2.0",
         "ink": "^6.6.0",
         "ink-gradient": "^3.0.0",
         "ink-select-input": "^6.2.0",
