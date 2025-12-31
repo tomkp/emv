@@ -139,7 +139,7 @@ function createContext(options: ParsedOptions): CommandContext {
 /**
  * Run a command and handle errors
  */
-async function runCommand(
+export async function runCommand(
     command: string,
     args: string[],
     ctx: CommandContext
