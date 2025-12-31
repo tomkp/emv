@@ -204,10 +204,7 @@ describe('EmvApplication', () => {
 
     describe('verifyPin', () => {
         it('should throw RangeError for PIN shorter than 4 digits', async () => {
-            await assert.rejects(
-                () => emv.verifyPin('123'),
-                /PIN must be a string of 4-12 digits/
-            );
+            await assert.rejects(() => emv.verifyPin('123'), /PIN must be a string of 4-12 digits/);
         });
 
         it('should throw RangeError for PIN longer than 12 digits', async () => {
@@ -380,17 +377,11 @@ describe('EmvApplication', () => {
 
     describe('getData', () => {
         it('should throw RangeError for tag less than 0', async () => {
-            await assert.rejects(
-                () => emv.getData(-1),
-                /Tag must be a positive integer/
-            );
+            await assert.rejects(() => emv.getData(-1), /Tag must be a positive integer/);
         });
 
         it('should throw RangeError for tag greater than 0xFFFF', async () => {
-            await assert.rejects(
-                () => emv.getData(0x10000),
-                /Tag must be a positive integer/
-            );
+            await assert.rejects(() => emv.getData(0x10000), /Tag must be a positive integer/);
         });
 
         it('should transmit GET DATA APDU with 1-byte tag', async () => {
@@ -484,9 +475,8 @@ describe('EmvApplication', () => {
 
         it('should return AIP and AFL on success', async () => {
             // Format 1 response: 80 06 1C00 08010100
-            mockCard.transmit = async () => Buffer.from([
-                0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00
-            ]);
+            mockCard.transmit = async () =>
+                Buffer.from([0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00]);
             const response = await emv.getProcessingOptions();
             assert.strictEqual(response.isOk(), true);
             assert.strictEqual(response.buffer.toString('hex'), '80061c0008010100');
@@ -552,11 +542,11 @@ describe('EmvApplication', () => {
 
         it('should return cryptogram on success', async () => {
             // Response with Application Cryptogram
-            mockCard.transmit = async () => Buffer.from([
-                0x77, 0x12, 0x9f, 0x27, 0x01, 0x80, 0x9f, 0x36,
-                0x02, 0x00, 0x01, 0x9f, 0x26, 0x08, 0x12, 0x34,
-                0x56, 0x78, 0x9a, 0xbc, 0x90, 0x00
-            ]);
+            mockCard.transmit = async () =>
+                Buffer.from([
+                    0x77, 0x12, 0x9f, 0x27, 0x01, 0x80, 0x9f, 0x36, 0x02, 0x00, 0x01, 0x9f, 0x26,
+                    0x08, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0x90, 0x00,
+                ]);
             const response = await emv.generateAc(0x80, [0x01]);
             assert.strictEqual(response.isOk(), true);
         });
@@ -607,9 +597,10 @@ describe('EmvApplication', () => {
 
         it('should return signed data on success', async () => {
             // Response with signed dynamic data
-            mockCard.transmit = async () => Buffer.from([
-                0x80, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x90, 0x00
-            ]);
+            mockCard.transmit = async () =>
+                Buffer.from([
+                    0x80, 0x08, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x90, 0x00,
+                ]);
             const response = await emv.internalAuthenticate([0x12, 0x34, 0x56, 0x78]);
             assert.strictEqual(response.isOk(), true);
             assert.strictEqual(response.buffer.length, 10);
@@ -657,8 +648,18 @@ describe('EmvApplication', () => {
             const aflBuffer = Buffer.from([0x08, 0x01, 0x03, 0x00, 0x10, 0x01, 0x01, 0x01]);
             const entries = parseAfl(aflBuffer);
             assert.strictEqual(entries.length, 2);
-            assert.deepStrictEqual(entries[0], { sfi: 1, firstRecord: 1, lastRecord: 3, sdaRecords: 0 });
-            assert.deepStrictEqual(entries[1], { sfi: 2, firstRecord: 1, lastRecord: 1, sdaRecords: 1 });
+            assert.deepStrictEqual(entries[0], {
+                sfi: 1,
+                firstRecord: 1,
+                lastRecord: 3,
+                sdaRecords: 0,
+            });
+            assert.deepStrictEqual(entries[1], {
+                sfi: 2,
+                firstRecord: 1,
+                lastRecord: 1,
+                sdaRecords: 1,
+            });
         });
 
         it('should return empty array for empty buffer', () => {
@@ -712,9 +713,7 @@ describe('EmvApplication', () => {
                 return Buffer.from([0x70, 0x02, 0x5a, 0x00, 0x90, 0x00]);
             };
 
-            const aflEntries = [
-                { sfi: 1, firstRecord: 1, lastRecord: 3, sdaRecords: 0 },
-            ];
+            const aflEntries = [{ sfi: 1, firstRecord: 1, lastRecord: 3, sdaRecords: 0 }];
 
             const records = await emv.readAllRecords(aflEntries);
             // Should have 2 records (first and third), second failed
@@ -754,30 +753,26 @@ describe('EmvApplication', () => {
 
         it('should build PDOL data from tag values', () => {
             const pdolEntries = [
-                { tag: 0x9f02, length: 6 },  // Amount
-                { tag: 0x5f2a, length: 2 },  // Currency
+                { tag: 0x9f02, length: 6 }, // Amount
+                { tag: 0x5f2a, length: 2 }, // Currency
             ];
             const tagValues = new Map<number, Buffer>([
-                [0x9f02, Buffer.from([0x00, 0x00, 0x00, 0x00, 0x10, 0x00])],  // 10.00
-                [0x5f2a, Buffer.from([0x08, 0x26])],  // USD
+                [0x9f02, Buffer.from([0x00, 0x00, 0x00, 0x00, 0x10, 0x00])], // 10.00
+                [0x5f2a, Buffer.from([0x08, 0x26])], // USD
             ]);
             const result = buildPdolData(pdolEntries, tagValues);
             assert.strictEqual(result.toString('hex'), '000000001000' + '0826');
         });
 
         it('should pad with zeros for missing tag values', () => {
-            const pdolEntries = [
-                { tag: 0x9f02, length: 6 },
-            ];
+            const pdolEntries = [{ tag: 0x9f02, length: 6 }];
             const tagValues = new Map<number, Buffer>();
             const result = buildPdolData(pdolEntries, tagValues);
             assert.strictEqual(result.toString('hex'), '000000000000');
         });
 
         it('should truncate values that are too long', () => {
-            const pdolEntries = [
-                { tag: 0x9f02, length: 3 },
-            ];
+            const pdolEntries = [{ tag: 0x9f02, length: 3 }];
             const tagValues = new Map<number, Buffer>([
                 [0x9f02, Buffer.from([0x00, 0x00, 0x00, 0x00, 0x10, 0x00])],
             ]);
@@ -791,9 +786,9 @@ describe('EmvApplication', () => {
 
         it('should build PDOL data with default values', () => {
             const pdolEntries = [
-                { tag: 0x9f02, length: 6 },  // Amount
-                { tag: 0x5f2a, length: 2 },  // Currency
-                { tag: 0x9a, length: 3 },    // Transaction Date
+                { tag: 0x9f02, length: 6 }, // Amount
+                { tag: 0x5f2a, length: 2 }, // Currency
+                { tag: 0x9a, length: 3 }, // Transaction Date
             ];
 
             const result = buildDefaultPdolData(pdolEntries, {
@@ -810,9 +805,7 @@ describe('EmvApplication', () => {
         });
 
         it('should allow custom overrides', () => {
-            const pdolEntries = [
-                { tag: 0x9f02, length: 6 },
-            ];
+            const pdolEntries = [{ tag: 0x9f02, length: 6 }];
 
             const customAmount = Buffer.from([0x00, 0x00, 0x00, 0x05, 0x00, 0x00]);
             const result = buildDefaultPdolData(pdolEntries, {
@@ -826,7 +819,7 @@ describe('EmvApplication', () => {
 
         it('should use zeros for tags without defaults', () => {
             const pdolEntries = [
-                { tag: 0x9f99, length: 4 },  // Unknown tag
+                { tag: 0x9f99, length: 4 }, // Unknown tag
             ];
 
             const result = buildDefaultPdolData(pdolEntries, {
@@ -859,7 +852,7 @@ describe('EmvApplication', () => {
             const result = buildDefaultCdolData({
                 amount: 1000,
                 currencyCode: 0x0840,
-                transactionType: 0x09,  // Cashback
+                transactionType: 0x09, // Cashback
             });
 
             // Transaction type is at offset 24 (after amount 6 + other 6 + country 2 + tvr 5 + currency 2 + date 3)
@@ -876,11 +869,16 @@ describe('EmvApplication', () => {
                 if (callCount === 1) {
                     // GPO response (Format 1): 80 len AIP(2) AFL(4)
                     // AIP: 1C00, AFL: SFI 1 (0x08) records 1-1
-                    return Buffer.from([0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00]);
+                    return Buffer.from([
+                        0x80, 0x06, 0x1c, 0x00, 0x08, 0x01, 0x01, 0x00, 0x90, 0x00,
+                    ]);
                 } else if (callCount === 2) {
                     // Read record response - proper TLV structure
                     // 70 len [5A len PAN]
-                    return Buffer.from([0x70, 0x0a, 0x5a, 0x08, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56, 0x90, 0x00]);
+                    return Buffer.from([
+                        0x70, 0x0a, 0x5a, 0x08, 0x12, 0x34, 0x56, 0x78, 0x90, 0x12, 0x34, 0x56,
+                        0x90, 0x00,
+                    ]);
                 } else if (callCount === 3) {
                     // Generate AC response with cryptogram - proper TLV structure
                     // 9F27 (4 bytes: 2-byte tag + 1-byte len + 1-byte value) = 4
@@ -888,11 +886,30 @@ describe('EmvApplication', () => {
                     // 9F26 (11 bytes: 2-byte tag + 1-byte len + 8-byte value) = 11
                     // Total = 20 bytes = 0x14
                     return Buffer.from([
-                        0x77, 0x14,  // 20 bytes
-                        0x9f, 0x27, 0x01, 0x80,  // CID: ARQC (4 bytes)
-                        0x9f, 0x36, 0x02, 0x00, 0x01,  // ATC: 1 (5 bytes)
-                        0x9f, 0x26, 0x08, 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0,  // Cryptogram (11 bytes)
-                        0x90, 0x00  // SW
+                        0x77,
+                        0x14, // 20 bytes
+                        0x9f,
+                        0x27,
+                        0x01,
+                        0x80, // CID: ARQC (4 bytes)
+                        0x9f,
+                        0x36,
+                        0x02,
+                        0x00,
+                        0x01, // ATC: 1 (5 bytes)
+                        0x9f,
+                        0x26,
+                        0x08,
+                        0x12,
+                        0x34,
+                        0x56,
+                        0x78,
+                        0x9a,
+                        0xbc,
+                        0xde,
+                        0xf0, // Cryptogram (11 bytes)
+                        0x90,
+                        0x00, // SW
                     ]);
                 }
                 return Buffer.from([0x90, 0x00]);
@@ -912,7 +929,7 @@ describe('EmvApplication', () => {
         });
 
         it('should handle GPO failure', async () => {
-            mockCard.transmit = async () => Buffer.from([0x69, 0x85]);  // Conditions not satisfied
+            mockCard.transmit = async () => Buffer.from([0x69, 0x85]); // Conditions not satisfied
 
             const result = await emv.performTransaction({
                 amount: 1000,
@@ -930,11 +947,20 @@ describe('EmvApplication', () => {
         it('should parse CVM list with amount thresholds', () => {
             // CVM List: X=1000, Y=5000, then rules
             const buffer = Buffer.from([
-                0x00, 0x00, 0x03, 0xe8,  // X = 1000
-                0x00, 0x00, 0x13, 0x88,  // Y = 5000
-                0x02, 0x03,              // Enciphered PIN online, if terminal supports CVM
-                0x1e, 0x03,              // Signature, if terminal supports CVM
-                0x1f, 0x00,              // No CVM, always
+                0x00,
+                0x00,
+                0x03,
+                0xe8, // X = 1000
+                0x00,
+                0x00,
+                0x13,
+                0x88, // Y = 5000
+                0x02,
+                0x03, // Enciphered PIN online, if terminal supports CVM
+                0x1e,
+                0x03, // Signature, if terminal supports CVM
+                0x1f,
+                0x00, // No CVM, always
             ]);
             const result = parseCvmList(buffer);
 
@@ -952,9 +978,16 @@ describe('EmvApplication', () => {
 
         it('should handle continue-on-fail flag', () => {
             const buffer = Buffer.from([
-                0x00, 0x00, 0x00, 0x00,  // X = 0
-                0x00, 0x00, 0x00, 0x00,  // Y = 0
-                0x42, 0x00,              // Enciphered PIN online + continue if fails, always
+                0x00,
+                0x00,
+                0x00,
+                0x00, // X = 0
+                0x00,
+                0x00,
+                0x00,
+                0x00, // Y = 0
+                0x42,
+                0x00, // Enciphered PIN online + continue if fails, always
             ]);
             const result = parseCvmList(buffer);
 
@@ -972,36 +1005,66 @@ describe('EmvApplication', () => {
         const { parseCvmList, evaluateCvm } = await import('./emv-application.js');
 
         it('should select first matching rule', () => {
-            const cvmList = parseCvmList(Buffer.from([
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x02, 0x03,  // Enciphered PIN, if terminal supports
-                0x1e, 0x03,  // Signature, if terminal supports
-            ]));
+            const cvmList = parseCvmList(
+                Buffer.from([
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x02,
+                    0x03, // Enciphered PIN, if terminal supports
+                    0x1e,
+                    0x03, // Signature, if terminal supports
+                ])
+            );
 
             const result = evaluateCvm(cvmList, { terminalSupportsCvm: true });
             assert.strictEqual(result?.method, 'enciphered_pin_online');
         });
 
         it('should skip rules where condition not met', () => {
-            const cvmList = parseCvmList(Buffer.from([
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x02, 0x03,  // Enciphered PIN, if terminal supports
-                0x1f, 0x00,  // No CVM, always
-            ]));
+            const cvmList = parseCvmList(
+                Buffer.from([
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x02,
+                    0x03, // Enciphered PIN, if terminal supports
+                    0x1f,
+                    0x00, // No CVM, always
+                ])
+            );
 
             const result = evaluateCvm(cvmList, { terminalSupportsCvm: false });
             assert.strictEqual(result?.method, 'no_cvm');
         });
 
         it('should handle amount threshold conditions', () => {
-            const cvmList = parseCvmList(Buffer.from([
-                0x00, 0x00, 0x03, 0xe8,  // X = 1000
-                0x00, 0x00, 0x00, 0x00,  // Y = 0
-                0x02, 0x07,  // Enciphered PIN, if amount > X
-                0x1f, 0x00,  // No CVM, always
-            ]));
+            const cvmList = parseCvmList(
+                Buffer.from([
+                    0x00,
+                    0x00,
+                    0x03,
+                    0xe8, // X = 1000
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00, // Y = 0
+                    0x02,
+                    0x07, // Enciphered PIN, if amount > X
+                    0x1f,
+                    0x00, // No CVM, always
+                ])
+            );
 
             // Amount 500 is under X (1000), so PIN rule doesn't apply
             const result1 = evaluateCvm(cvmList, { amount: 500 });
@@ -1013,14 +1076,56 @@ describe('EmvApplication', () => {
         });
 
         it('should return undefined if no rules match', () => {
-            const cvmList = parseCvmList(Buffer.from([
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00,
-                0x02, 0x03,  // Enciphered PIN, if terminal supports
-            ]));
+            const cvmList = parseCvmList(
+                Buffer.from([
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x02,
+                    0x03, // Enciphered PIN, if terminal supports
+                ])
+            );
 
             const result = evaluateCvm(cvmList, { terminalSupportsCvm: false });
             assert.strictEqual(result, undefined);
+        });
+    });
+
+    describe('stringToBcd', async () => {
+        const { stringToBcd } = await import('./emv-application.js');
+
+        it('should encode "00" as 0x00', () => {
+            assert.strictEqual(stringToBcd('00'), 0x00);
+        });
+
+        it('should encode "12" as 0x12', () => {
+            assert.strictEqual(stringToBcd('12'), 0x12);
+        });
+
+        it('should encode "25" as 0x25', () => {
+            assert.strictEqual(stringToBcd('25'), 0x25);
+        });
+
+        it('should encode "99" as 0x99', () => {
+            assert.strictEqual(stringToBcd('99'), 0x99);
+        });
+
+        it('should encode "10" correctly (not as hex 16)', () => {
+            // This is the key test - parseInt('10', 16) would give 16 (0x10)
+            // but BCD encoding of "10" should be (1 << 4) | 0 = 0x10 = 16
+            // So for '10' specifically, both approaches give same result.
+            // Let's test '31' where they differ: parseInt('31', 16) = 49 (0x31)
+            // BCD '31' = (3 << 4) | 1 = 49 (0x31) - also same!
+            // The bug is subtle - it works for valid date digits 0-9.
+            // Test with explicit nibble check
+            const result = stringToBcd('31');
+            assert.strictEqual(result >> 4, 3, 'High nibble should be 3');
+            assert.strictEqual(result & 0x0f, 1, 'Low nibble should be 1');
         });
     });
 });

@@ -309,7 +309,12 @@ export function parseAfl(buffer: Buffer): AflEntry[] {
         const firstRecord = buffer[i + 1];
         const lastRecord = buffer[i + 2];
         const sdaRecords = buffer[i + 3];
-        if (sfiByte === undefined || firstRecord === undefined || lastRecord === undefined || sdaRecords === undefined) {
+        if (
+            sfiByte === undefined ||
+            firstRecord === undefined ||
+            lastRecord === undefined ||
+            sdaRecords === undefined
+        ) {
             continue;
         }
         entries.push({
@@ -401,21 +406,26 @@ function generateUnpredictableNumber(): Buffer {
  * @returns Buffer containing PDOL data ready for GPO
  */
 export function buildDefaultPdolData(entries: DolEntry[], options: PdolBuildOptions): Buffer {
-    const { amount, currencyCode, transactionType = 0x00, overrides = new Map<number, Buffer>() } = options;
+    const {
+        amount,
+        currencyCode,
+        transactionType = 0x00,
+        overrides = new Map<number, Buffer>(),
+    } = options;
 
     // Build default values for common PDOL tags
     const defaults = new Map<number, Buffer>([
-        [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
-        [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+        [0x9f02, amountToBcd(amount)], // Amount, Authorized
+        [0x9f03, Buffer.alloc(6)], // Amount, Other
         [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
         [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-        [0x9a, getCurrentDateBcd()],                                      // Transaction Date
-        [0x9c, Buffer.from([transactionType])],                           // Transaction Type
-        [0x9f37, generateUnpredictableNumber()],                          // Unpredictable Number
-        [0x9f35, Buffer.from([0x22])],                                    // Terminal Type
-        [0x9f45, Buffer.alloc(2)],                                        // Data Authentication Code
-        [0x9f34, Buffer.from([0x00, 0x00, 0x00])],                         // CVM Results
-        [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])],                   // TTQ (Terminal Transaction Qualifiers)
+        [0x9a, getCurrentDateBcd()], // Transaction Date
+        [0x9c, Buffer.from([transactionType])], // Transaction Type
+        [0x9f37, generateUnpredictableNumber()], // Unpredictable Number
+        [0x9f35, Buffer.from([0x22])], // Terminal Type
+        [0x9f45, Buffer.alloc(2)], // Data Authentication Code
+        [0x9f34, Buffer.from([0x00, 0x00, 0x00])], // CVM Results
+        [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])], // TTQ (Terminal Transaction Qualifiers)
     ]);
 
     // Merge user overrides
@@ -444,14 +454,14 @@ export function buildDefaultCdolData(options: CdolBuildOptions): Buffer {
 
     // Standard CDOL1 fields in typical order
     const defaults = new Map<number, Buffer>([
-        [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized (6 bytes)
-        [0x9f03, Buffer.alloc(6)],                                        // Amount, Other (6 bytes)
+        [0x9f02, amountToBcd(amount)], // Amount, Authorized (6 bytes)
+        [0x9f03, Buffer.alloc(6)], // Amount, Other (6 bytes)
         [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code (2 bytes)
-        [0x95, tvr],                                                      // TVR (5 bytes)
+        [0x95, tvr], // TVR (5 bytes)
         [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code (2 bytes)
-        [0x9a, getCurrentDateBcd()],                                      // Transaction Date (3 bytes)
-        [0x9c, Buffer.from([transactionType])],                           // Transaction Type (1 byte)
-        [0x9f37, generateUnpredictableNumber()],                          // Unpredictable Number (4 bytes)
+        [0x9a, getCurrentDateBcd()], // Transaction Date (3 bytes)
+        [0x9c, Buffer.from([transactionType])], // Transaction Type (1 byte)
+        [0x9f37, generateUnpredictableNumber()], // Unpredictable Number (4 bytes)
     ]);
 
     // Merge user overrides
@@ -461,14 +471,14 @@ export function buildDefaultCdolData(options: CdolBuildOptions): Buffer {
 
     // Build in standard CDOL1 order
     return Buffer.concat([
-        defaults.get(0x9f02) ?? Buffer.alloc(6),  // Amount
-        defaults.get(0x9f03) ?? Buffer.alloc(6),  // Other Amount
-        defaults.get(0x9f1a) ?? Buffer.alloc(2),  // Country Code
-        defaults.get(0x95) ?? Buffer.alloc(5),    // TVR
-        defaults.get(0x5f2a) ?? Buffer.alloc(2),  // Currency
-        defaults.get(0x9a) ?? Buffer.alloc(3),    // Date
-        defaults.get(0x9c) ?? Buffer.alloc(1),    // Type
-        defaults.get(0x9f37) ?? Buffer.alloc(4),  // Unpredictable Number
+        defaults.get(0x9f02) ?? Buffer.alloc(6), // Amount
+        defaults.get(0x9f03) ?? Buffer.alloc(6), // Other Amount
+        defaults.get(0x9f1a) ?? Buffer.alloc(2), // Country Code
+        defaults.get(0x95) ?? Buffer.alloc(5), // TVR
+        defaults.get(0x5f2a) ?? Buffer.alloc(2), // Currency
+        defaults.get(0x9a) ?? Buffer.alloc(3), // Date
+        defaults.get(0x9c) ?? Buffer.alloc(1), // Type
+        defaults.get(0x9f37) ?? Buffer.alloc(4), // Unpredictable Number
     ]);
 }
 
@@ -524,15 +534,24 @@ export function parseCvmList(buffer: Buffer): CvmList {
  */
 function cvmCodeToMethod(code: number): CvmMethod {
     switch (code) {
-        case 0x00: return 'fail';
-        case 0x01: return 'plaintext_pin_icc';
-        case 0x02: return 'enciphered_pin_online';
-        case 0x03: return 'plaintext_pin_icc_signature';
-        case 0x04: return 'enciphered_pin_icc';
-        case 0x05: return 'enciphered_pin_icc_signature';
-        case 0x1e: return 'signature';
-        case 0x1f: return 'no_cvm';
-        default: return 'unknown';
+        case 0x00:
+            return 'fail';
+        case 0x01:
+            return 'plaintext_pin_icc';
+        case 0x02:
+            return 'enciphered_pin_online';
+        case 0x03:
+            return 'plaintext_pin_icc_signature';
+        case 0x04:
+            return 'enciphered_pin_icc';
+        case 0x05:
+            return 'enciphered_pin_icc_signature';
+        case 0x1e:
+            return 'signature';
+        case 0x1f:
+            return 'no_cvm';
+        default:
+            return 'unknown';
     }
 }
 
@@ -541,17 +560,28 @@ function cvmCodeToMethod(code: number): CvmMethod {
  */
 function conditionByteToCondition(code: number): CvmCondition {
     switch (code) {
-        case 0x00: return 'always';
-        case 0x01: return 'unattended_cash';
-        case 0x02: return 'not_unattended_cash_manual_pin';
-        case 0x03: return 'terminal_supports_cvm';
-        case 0x04: return 'manual_cash';
-        case 0x05: return 'purchase_with_cashback';
-        case 0x06: return 'amount_under_x';
-        case 0x07: return 'amount_over_x';
-        case 0x08: return 'amount_under_y';
-        case 0x09: return 'amount_over_y';
-        default: return 'unknown';
+        case 0x00:
+            return 'always';
+        case 0x01:
+            return 'unattended_cash';
+        case 0x02:
+            return 'not_unattended_cash_manual_pin';
+        case 0x03:
+            return 'terminal_supports_cvm';
+        case 0x04:
+            return 'manual_cash';
+        case 0x05:
+            return 'purchase_with_cashback';
+        case 0x06:
+            return 'amount_under_x';
+        case 0x07:
+            return 'amount_over_x';
+        case 0x08:
+            return 'amount_under_y';
+        case 0x09:
+            return 'amount_over_y';
+        default:
+            return 'unknown';
     }
 }
 
@@ -575,7 +605,11 @@ export function evaluateCvm(cvmList: CvmList, context: CvmContext): CvmRule | un
 /**
  * Evaluate a CVM condition against the transaction context
  */
-function evaluateCondition(condition: CvmCondition, cvmList: CvmList, context: CvmContext): boolean {
+function evaluateCondition(
+    condition: CvmCondition,
+    cvmList: CvmList,
+    context: CvmContext
+): boolean {
     switch (condition) {
         case 'always':
             return true;
@@ -584,9 +618,11 @@ function evaluateCondition(condition: CvmCondition, cvmList: CvmList, context: C
             return context.unattendedCash === true;
 
         case 'not_unattended_cash_manual_pin':
-            return context.unattendedCash !== true &&
-                   context.manualCash !== true &&
-                   context.purchaseWithCashback !== true;
+            return (
+                context.unattendedCash !== true &&
+                context.manualCash !== true &&
+                context.purchaseWithCashback !== true
+            );
 
         case 'terminal_supports_cvm':
             return context.terminalSupportsCvm === true;
@@ -620,9 +656,12 @@ function evaluateCondition(condition: CvmCondition, cvmList: CvmList, context: C
  */
 function cryptogramTypeToByte(type: 'ARQC' | 'TC' | 'AAC'): number {
     switch (type) {
-        case 'AAC': return 0x00;
-        case 'TC': return 0x40;
-        case 'ARQC': return 0x80;
+        case 'AAC':
+            return 0x00;
+        case 'TC':
+            return 0x40;
+        case 'ARQC':
+            return 0x80;
     }
 }
 
@@ -632,10 +671,14 @@ function cryptogramTypeToByte(type: 'ARQC' | 'TC' | 'AAC'): number {
 function byteToCryptogramType(cid: number): 'ARQC' | 'TC' | 'AAC' | undefined {
     const type = cid & 0xc0;
     switch (type) {
-        case 0x00: return 'AAC';
-        case 0x40: return 'TC';
-        case 0x80: return 'ARQC';
-        default: return undefined;
+        case 0x00:
+            return 'AAC';
+        case 0x40:
+            return 'TC';
+        case 0x80:
+            return 'ARQC';
+        default:
+            return undefined;
     }
 }
 
@@ -654,6 +697,16 @@ function amountToBcd(amount: number): Buffer {
 }
 
 /**
+ * Convert a 2-character decimal string to a BCD byte.
+ * Each character becomes a nibble: "25" -> 0x25 (high nibble 2, low nibble 5)
+ */
+export function stringToBcd(str: string): number {
+    const high = parseInt(str[0] ?? '0', 10);
+    const low = parseInt(str[1] ?? '0', 10);
+    return (high << 4) | low;
+}
+
+/**
  * Get current date as BCD YYMMDD
  */
 function getCurrentDateBcd(): Buffer {
@@ -661,11 +714,7 @@ function getCurrentDateBcd(): Buffer {
     const year = (now.getFullYear() % 100).toString().padStart(2, '0');
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const day = now.getDate().toString().padStart(2, '0');
-    return Buffer.from([
-        parseInt(year, 16),
-        parseInt(month, 16),
-        parseInt(day, 16),
-    ]);
+    return Buffer.from([stringToBcd(year), stringToBcd(month), stringToBcd(day)]);
 }
 
 /**
@@ -916,7 +965,9 @@ export class EmvApplication {
      */
     async getProcessingOptions(pdolData?: Buffer | readonly number[]): Promise<CardResponse> {
         const data = pdolData
-            ? (Buffer.isBuffer(pdolData) ? pdolData : Buffer.from(pdolData))
+            ? Buffer.isBuffer(pdolData)
+                ? pdolData
+                : Buffer.from(pdolData)
             : Buffer.alloc(0);
 
         const apdu = buildGpoApdu(data);
@@ -1000,17 +1051,27 @@ export class EmvApplication {
 
         // Build default tag values for PDOL
         const defaultPdolValues = new Map<number, Buffer>([
-            [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
-            [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+            [0x9f02, amountToBcd(amount)], // Amount, Authorized
+            [0x9f03, Buffer.alloc(6)], // Amount, Other
             [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
             [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-            [0x9a, getCurrentDateBcd()],                                      // Transaction Date
-            [0x9c, Buffer.from([transactionType])],                           // Transaction Type
-            [0x9f37, Buffer.from([Math.random() * 256, Math.random() * 256, Math.random() * 256, Math.random() * 256].map(Math.floor))], // Unpredictable Number
-            [0x9f35, Buffer.from([0x22])],                                    // Terminal Type
-            [0x9f45, Buffer.alloc(2)],                                        // Data Authentication Code
-            [0x9f34, Buffer.from([0x00, 0x00, 0x00])],                         // CVM Results
-            [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])],                   // TTQ (Terminal Transaction Qualifiers)
+            [0x9a, getCurrentDateBcd()], // Transaction Date
+            [0x9c, Buffer.from([transactionType])], // Transaction Type
+            [
+                0x9f37,
+                Buffer.from(
+                    [
+                        Math.random() * 256,
+                        Math.random() * 256,
+                        Math.random() * 256,
+                        Math.random() * 256,
+                    ].map(Math.floor)
+                ),
+            ], // Unpredictable Number
+            [0x9f35, Buffer.from([0x22])], // Terminal Type
+            [0x9f45, Buffer.alloc(2)], // Data Authentication Code
+            [0x9f34, Buffer.from([0x00, 0x00, 0x00])], // CVM Results
+            [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])], // TTQ (Terminal Transaction Qualifiers)
         ]);
 
         // Merge with user-provided values
@@ -1063,16 +1124,26 @@ export class EmvApplication {
         // Step 3: Build CDOL data and Generate AC
         // Use a minimal CDOL if we don't have the actual CDOL from the card
         const defaultCdolValues = new Map<number, Buffer>([
-            [0x9f02, amountToBcd(amount)],                                    // Amount, Authorized
-            [0x9f03, Buffer.alloc(6)],                                        // Amount, Other
+            [0x9f02, amountToBcd(amount)], // Amount, Authorized
+            [0x9f03, Buffer.alloc(6)], // Amount, Other
             [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
-            [0x95, Buffer.alloc(5)],                                          // TVR
+            [0x95, Buffer.alloc(5)], // TVR
             [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-            [0x9a, getCurrentDateBcd()],                                      // Transaction Date
-            [0x9c, Buffer.from([transactionType])],                           // Transaction Type
-            [0x9f37, Buffer.from([Math.random() * 256, Math.random() * 256, Math.random() * 256, Math.random() * 256].map(Math.floor))], // Unpredictable Number
-            [0x82, aip ?? Buffer.alloc(2)],                                   // AIP
-            [0x9f36, Buffer.alloc(2)],                                        // ATC (placeholder)
+            [0x9a, getCurrentDateBcd()], // Transaction Date
+            [0x9c, Buffer.from([transactionType])], // Transaction Type
+            [
+                0x9f37,
+                Buffer.from(
+                    [
+                        Math.random() * 256,
+                        Math.random() * 256,
+                        Math.random() * 256,
+                        Math.random() * 256,
+                    ].map(Math.floor)
+                ),
+            ], // Unpredictable Number
+            [0x82, aip ?? Buffer.alloc(2)], // AIP
+            [0x9f36, Buffer.alloc(2)], // ATC (placeholder)
         ]);
 
         // Merge with user-provided values
@@ -1082,14 +1153,14 @@ export class EmvApplication {
 
         // Build a minimal CDOL data buffer (common fields)
         const cdolData = Buffer.concat([
-            defaultCdolValues.get(0x9f02) ?? Buffer.alloc(6),  // Amount
-            defaultCdolValues.get(0x9f03) ?? Buffer.alloc(6),  // Other Amount
-            defaultCdolValues.get(0x9f1a) ?? Buffer.alloc(2),  // Country Code
-            defaultCdolValues.get(0x95) ?? Buffer.alloc(5),    // TVR
-            defaultCdolValues.get(0x5f2a) ?? Buffer.alloc(2),  // Currency
-            defaultCdolValues.get(0x9a) ?? Buffer.alloc(3),    // Date
-            defaultCdolValues.get(0x9c) ?? Buffer.alloc(1),    // Type
-            defaultCdolValues.get(0x9f37) ?? Buffer.alloc(4),  // Unpredictable Number
+            defaultCdolValues.get(0x9f02) ?? Buffer.alloc(6), // Amount
+            defaultCdolValues.get(0x9f03) ?? Buffer.alloc(6), // Other Amount
+            defaultCdolValues.get(0x9f1a) ?? Buffer.alloc(2), // Country Code
+            defaultCdolValues.get(0x95) ?? Buffer.alloc(5), // TVR
+            defaultCdolValues.get(0x5f2a) ?? Buffer.alloc(2), // Currency
+            defaultCdolValues.get(0x9a) ?? Buffer.alloc(3), // Date
+            defaultCdolValues.get(0x9c) ?? Buffer.alloc(1), // Type
+            defaultCdolValues.get(0x9f37) ?? Buffer.alloc(4), // Unpredictable Number
         ]);
 
         const cryptogramByte = cryptogramTypeToByte(cryptogramType);
@@ -1110,7 +1181,8 @@ export class EmvApplication {
         const cryptogram = findTagInBuffer(acResponse.buffer, 0x9f26);
         const atcBuffer = findTagInBuffer(acResponse.buffer, 0x9f36);
 
-        const returnedCryptogramType = cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
+        const returnedCryptogramType =
+            cid && cid[0] !== undefined ? byteToCryptogramType(cid[0]) : undefined;
         const atc = atcBuffer && atcBuffer.length >= 2 ? atcBuffer.readUInt16BE(0) : undefined;
 
         return {
