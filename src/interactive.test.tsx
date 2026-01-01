@@ -282,10 +282,21 @@ describe('Interactive CLI', () => {
     });
 
     describe('Header', () => {
+        // Helper to strip ANSI escape codes from string
+        const stripAnsi = (str: string): string =>
+            str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
+
         it('should render ASCII art with correct EMV letter spacing and border', () => {
             const { lastFrame, unmount } = render(<Header />);
             const frame = lastFrame() ?? '';
             unmount();
+
+            // Strip ANSI codes and normalize whitespace
+            // ink-testing-library may include color codes and varying indentation
+            const normalizedFrame = stripAnsi(frame)
+                .split('\n')
+                .map((line) => line.trimStart())
+                .join('\n');
 
             // These exact strings define the EMV ASCII art structure with borders
             // The spaces are critical for proper letter alignment
@@ -301,9 +312,10 @@ describe('Interactive CLI', () => {
 
             for (const pattern of expectedAsciiPatterns) {
                 assert.ok(
-                    frame.includes(pattern),
+                    normalizedFrame.includes(pattern),
                     `ASCII art is malformed - missing pattern: "${pattern}". ` +
-                        'The spacing in the EMV logo has been corrupted.'
+                        'The spacing in the EMV logo has been corrupted.\n' +
+                        `Actual frame (normalized):\n${normalizedFrame}`
                 );
             }
         });
