@@ -284,6 +284,7 @@ describe('Interactive CLI', () => {
     describe('Header', () => {
         // Helper to strip ANSI escape codes from string
         const stripAnsi = (str: string): string =>
+            // eslint-disable-next-line no-control-regex
             str.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
 
         it('should render ASCII art with correct EMV letter spacing and border', () => {
