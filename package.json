@@ -1,6 +1,6 @@
 {
     "name": "emv",
-    "version": "2.0.0",
+    "version": "2.0.1",
     "type": "module",
     "description": "EMV / Chip and PIN CLI and library for PC/SC card readers",
     "bin": {
