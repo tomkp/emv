@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import Gradient from 'ink-gradient';
+import { showVersion } from '../../cli.js';
 
 // prettier-ignore
 const ASCII_ART = [
@@ -13,6 +14,8 @@ const ASCII_ART = [
 ] as const;
 
 export function Header(): React.JSX.Element {
+    const version = `v${showVersion()}`;
+    const versionPadding = ' '.repeat(24 - version.length + 6);
     return (
         <Box flexDirection="column" marginBottom={1}>
             <Gradient name="rainbow">
@@ -56,8 +59,8 @@ export function Header(): React.JSX.Element {
                 <Gradient name="pastel">
                     <Text>{ASCII_ART[4]}</Text>
                 </Gradient>
-                <Text color="gray">{'   v2.0.0'}</Text>
-                <Text color="cyan">{' '.repeat(24)}║</Text>
+                <Text color="gray">{'   '}{version}</Text>
+                <Text color="cyan">{versionPadding}║</Text>
             </Text>
             <Text bold>
                 <Text color="cyan">{'║  '}</Text>
