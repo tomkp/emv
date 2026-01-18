@@ -4,7 +4,7 @@
     "type": "module",
     "description": "EMV / Chip and PIN CLI and library for PC/SC card readers",
     "bin": {
-        "emv": "./dist/cli.js"
+        "emv": "dist/cli.js"
     },
     "exports": {
         ".": {
