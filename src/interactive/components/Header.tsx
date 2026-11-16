@@ -59,7 +59,10 @@ export function Header(): React.JSX.Element {
                 <Gradient name="pastel">
                     <Text>{ASCII_ART[4]}</Text>
                 </Gradient>
-                <Text color="gray">{'   '}{version}</Text>
+                <Text color="gray">
+                    {'   '}
+                    {version}
+                </Text>
                 <Text color="cyan">{versionPadding}║</Text>
             </Text>
             <Text bold>
