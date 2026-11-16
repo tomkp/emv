@@ -205,9 +205,10 @@ export async function withCard(
 
 /**
  * Start monitoring and wait for a card in the requested reader.
- * Rejects on timeout, or when PC/SC reports an error (for example, no PC/SC service,
- * or a card that cannot be connected to). The error listener stays registered so
- * later PC/SC errors do not crash the process.
+ * Rejects on timeout, or on a PC/SC error when there are no readers (no PC/SC service).
+ * Other errors may come from a card in another reader (for example, one that can't
+ * be connected to), so they are reported and the wait goes on. The error listener
+ * stays registered so later PC/SC errors do not crash the process.
  */
 function nextCard(
     ctx: CommandContext,
@@ -230,8 +231,13 @@ function nextCard(
         });
 
         devices.on('error', (err: unknown) => {
-            clearTimeout(timeoutId);
-            reject(new Error(`Card reader error: ${toError(err).message}`));
+            const message = `Card reader error: ${toError(err).message}`;
+            if (devices.listReaders().length === 0) {
+                clearTimeout(timeoutId);
+                reject(new Error(message));
+            } else {
+                ctx.error(message);
+            }
         });
 
         devices.start();
@@ -248,6 +254,44 @@ function toError(err: unknown): Error {
 async function createDevices(): Promise<DevicesLike> {
     const { Devices } = await import('smartcard');
     return new Devices() as DevicesLike;
+}
+
+const INVALID_AID = 'Invalid AID format. AID must be 5-16 bytes in hex (e.g., a0000000041010)';
+const INVALID_TAG = 'Invalid tag format. Tag must be 1-2 bytes in hex (e.g., 9f17)';
+const INVALID_PIN = 'Invalid PIN format. PIN must be 4-12 digits.';
+
+/**
+ * Check an AID argument. Returns an error message, or undefined if it is valid.
+ */
+export function aidError(aidHex: string): string | undefined {
+    return parseHexAid(aidHex) ? undefined : INVALID_AID;
+}
+
+/**
+ * Check SFI and record number arguments. Returns an error message, or undefined if they are valid.
+ */
+export function recordError(sfi: number, record: number): string | undefined {
+    if (!Number.isInteger(sfi) || sfi < 1 || sfi > 30) {
+        return 'SFI must be an integer between 1 and 30';
+    }
+    if (!Number.isInteger(record) || record < 0 || record > 255) {
+        return 'Record number must be an integer between 0 and 255';
+    }
+    return undefined;
+}
+
+/**
+ * Check a tag argument. Returns an error message, or undefined if it is valid.
+ */
+export function tagError(tagStr: string): string | undefined {
+    return parseHexTag(tagStr) === null ? INVALID_TAG : undefined;
+}
+
+/**
+ * Check a PIN argument. Returns an error message, or undefined if it is valid.
+ */
+export function pinError(pin: string): string | undefined {
+    return /^\d{4,12}$/.test(pin) ? undefined : INVALID_PIN;
 }
 
 /**
@@ -320,7 +364,7 @@ export async function selectApp(
 ): Promise<number> {
     const aidBuffer = parseHexAid(aidHex);
     if (!aidBuffer) {
-        ctx.error('Invalid AID format. AID must be 5-16 bytes in hex (e.g., a0000000041010)');
+        ctx.error(INVALID_AID);
         return 1;
     }
 
@@ -450,15 +494,9 @@ export async function readRecord(
     record: number,
     options: CommandOptions = {}
 ): Promise<number> {
-    // Validate SFI
-    if (!Number.isInteger(sfi) || sfi < 1 || sfi > 30) {
-        ctx.error('SFI must be an integer between 1 and 30');
-        return 1;
-    }
-
-    // Validate record number
-    if (!Number.isInteger(record) || record < 0 || record > 255) {
-        ctx.error('Record number must be an integer between 0 and 255');
+    const argumentError = recordError(sfi, record);
+    if (argumentError) {
+        ctx.error(argumentError);
         return 1;
     }
 
@@ -505,7 +543,7 @@ export async function getData(
 ): Promise<number> {
     const tag = parseHexTag(tagStr);
     if (tag === null) {
-        ctx.error('Invalid tag format. Tag must be 1-2 bytes in hex (e.g., 9f17)');
+        ctx.error(INVALID_TAG);
         return 1;
     }
 
@@ -536,9 +574,9 @@ export async function verifyPin(
     pin: string,
     options: CommandOptions = {}
 ): Promise<number> {
-    // Validate PIN format
-    if (!/^\d{4,12}$/.test(pin)) {
-        ctx.error('Invalid PIN format. PIN must be 4-12 digits.');
+    const argumentError = pinError(pin);
+    if (argumentError) {
+        ctx.error(argumentError);
         return 1;
     }
 

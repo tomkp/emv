@@ -34,9 +34,15 @@ export interface TransactionOptions {
     transactionType?: number;
     /** Cryptogram type to request: 'ARQC' (online), 'TC' (offline approve), 'AAC' (decline) */
     cryptogramType?: 'ARQC' | 'TC' | 'AAC';
-    /** Additional tag values for PDOL */
+    /**
+     * Tag values for the PDOL, overriding the defaults.
+     * An unpredictable number (9F37) given here and not in cdolValues is used for both.
+     */
     pdolValues?: Map<number, Buffer>;
-    /** Additional tag values for CDOL */
+    /**
+     * Tag values for the CDOL1, overriding the defaults.
+     * An unpredictable number (9F37) given here and not in pdolValues is used for both.
+     */
     cdolValues?: Map<number, Buffer>;
 }
 
@@ -327,8 +333,15 @@ function buildGetDataApdu(tag: number): Buffer {
  * Build GET PROCESSING OPTIONS APDU command
  */
 function buildGpoApdu(pdolData: Buffer): Buffer {
-    // Command data is wrapped in tag 83 (Command Template)
-    const commandData = Buffer.from([0x83, pdolData.length, ...pdolData]);
+    // Command data is wrapped in tag 83 (Command Template), with a BER length:
+    // one byte up to 127, then 81 followed by the length
+    if (pdolData.length > 252) {
+        throw new RangeError(
+            `PDOL data must be at most 252 bytes to fit a GET PROCESSING OPTIONS command, got ${String(pdolData.length)}`
+        );
+    }
+    const length = pdolData.length < 0x80 ? [pdolData.length] : [0x81, pdolData.length];
+    const commandData = Buffer.from([0x83, ...length, ...pdolData]);
     return Buffer.from([
         0x80, // CLA: proprietary
         0xa8, // INS: GET PROCESSING OPTIONS
@@ -1267,6 +1280,9 @@ export class EmvApplication {
         if (data.length === 0) {
             throw new RangeError('CDOL data must not be empty');
         }
+        if (data.length > 255) {
+            throw new RangeError(`CDOL data must be at most 255 bytes, got ${String(data.length)}`);
+        }
 
         const apdu = buildGenerateAcApdu(cryptogramType, data);
         const response = await this.#transmit(apdu);
@@ -1321,6 +1337,11 @@ export class EmvApplication {
         // One set of terminal data for the whole transaction, so PDOL and CDOL agree
         // (e.g., on the unpredictable number)
         const terminalData = defaultTerminalData(options);
+        // An unpredictable number given for only one of the two commands is used for both
+        const unpredictableNumber = pdolValues?.get(0x9f37) ?? cdolValues?.get(0x9f37);
+        if (unpredictableNumber) {
+            terminalData.set(0x9f37, unpredictableNumber);
+        }
 
         // Step 1: GET PROCESSING OPTIONS
         const gpoResponse = await this.getProcessingOptions(

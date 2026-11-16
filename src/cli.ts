@@ -17,6 +17,10 @@ import {
     dumpCard,
     processShellCommand,
     withCard,
+    aidError,
+    recordError,
+    tagError,
+    pinError,
     type CommandContext,
     type CommandOptions,
 } from './commands.js';
@@ -139,6 +143,17 @@ function createContext(options: ParsedOptions): CommandContext {
 }
 
 /**
+ * Report an argument error, if there is one. Arguments are checked before
+ * waiting for a card, so a mistyped command fails straight away.
+ */
+function invalidArgument(ctx: CommandContext, error: string | undefined): boolean {
+    if (error) {
+        ctx.error(error);
+    }
+    return error !== undefined;
+}
+
+/**
  * Run a command and handle errors.
  * Card commands wait for a card (see withCard) and run against it.
  * @param options - Devices or EMV application to use instead of the real ones (for tests)
@@ -162,6 +177,7 @@ export async function runCommand(
                 ctx.error('Usage: emv select-app <aid>');
                 return 1;
             }
+            if (invalidArgument(ctx, aidError(aid))) return 1;
             return withCard(ctx, (emv) => selectApp(ctx, aid, { emv }), options);
         }
         case 'list-apps':
@@ -179,6 +195,7 @@ export async function runCommand(
                 ctx.error('SFI and record must be numbers');
                 return 1;
             }
+            if (invalidArgument(ctx, recordError(sfi, record))) return 1;
             return withCard(ctx, (emv) => readRecord(ctx, sfi, record, { emv }), options);
         }
         case 'get-data': {
@@ -187,6 +204,7 @@ export async function runCommand(
                 ctx.error('Usage: emv get-data <tag>');
                 return 1;
             }
+            if (invalidArgument(ctx, tagError(tagArg))) return 1;
             return withCard(ctx, (emv) => getData(ctx, tagArg, { emv }), options);
         }
         case 'verify-pin': {
@@ -195,6 +213,7 @@ export async function runCommand(
                 ctx.error('Usage: emv verify-pin <pin>');
                 return 1;
             }
+            if (invalidArgument(ctx, pinError(pin))) return 1;
             return withCard(ctx, (emv) => verifyPin(ctx, pin, { emv }), options);
         }
         case 'info':

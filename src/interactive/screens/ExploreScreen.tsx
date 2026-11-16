@@ -1,46 +1,12 @@
 import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
-import {
-    parseGpoResponseBuffer,
-    type EmvApplication,
-    type PdolBuildOptions,
-    type RecordData,
-} from '../../emv-application.js';
+import type { EmvApplication } from '../../emv-application.js';
 import { format as formatTlv, findTagInBuffer, formatGpoResponse } from '../../emv-tags.js';
 import { Header, Footer, CardBox, StatusBar, LoadingSpinner } from '../components/index.js';
+import { processingOptions, readApplicationRecords } from '../explore.js';
 import { formatSw } from '../format.js';
 import type { AppInfo } from '../types.js';
-
-/**
- * Terminal data for GET PROCESSING OPTIONS while exploring: no amount, in US dollars.
- * Cards need PDOL data of the right shape to return their AIP and AFL; the values
- * themselves rarely matter.
- */
-const EXPLORE_TERMINAL_DATA: PdolBuildOptions = { amount: 0, currencyCode: 0x0840 };
-
-/**
- * Read the application's records: those listed in the AFL from GET PROCESSING OPTIONS,
- * or, without an AFL (for example when GPO was already done), every SFI from 1 to 30,
- * moving to the next SFI at the first record that can't be read.
- */
-async function readRecords(emv: EmvApplication): Promise<RecordData[]> {
-    const gpo = await emv.initiateApplicationProcessing(EXPLORE_TERMINAL_DATA);
-    const afl = gpo.isOk() ? parseGpoResponseBuffer(gpo.buffer).afl : [];
-    if (afl.length > 0) {
-        return emv.readAllRecords(afl);
-    }
-
-    const records: RecordData[] = [];
-    for (let sfi = 1; sfi <= 30; sfi++) {
-        for (let recordNumber = 1; recordNumber <= 10; recordNumber++) {
-            const response = await emv.readRecord(sfi, recordNumber);
-            if (!response.isOk()) break;
-            records.push({ sfi, recordNumber, data: response.buffer });
-        }
-    }
-    return records;
-}
 
 interface ExploreScreenProps {
     emv: EmvApplication;
@@ -73,8 +39,7 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
             try {
                 switch (action) {
                     case 'gpo': {
-                        const response =
-                            await emv.initiateApplicationProcessing(EXPLORE_TERMINAL_DATA);
+                        const response = await processingOptions(emv);
                         if (response.isOk()) {
                             const formatted = formatGpoResponse(response.buffer);
                             setData([
@@ -86,7 +51,7 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
                         break;
                     }
                     case 'records': {
-                        const records = (await readRecords(emv)).map((record) => ({
+                        const records = (await readApplicationRecords(emv)).map((record) => ({
                             tag: `SFI${String(record.sfi)}:R${String(record.recordNumber)}`,
                             name: 'RECORD',
                             value:

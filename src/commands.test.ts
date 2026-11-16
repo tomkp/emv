@@ -1074,6 +1074,24 @@ describe('withCard', () => {
         assert.ok(isStopped());
     });
 
+    it('should keep waiting for the requested reader when another reader reports an error', async () => {
+        const { ctx, errors } = createMockContext();
+        ctx.readerName = 'Reader B';
+        const card = cardAnswering(() => Buffer.from([0x90, 0x00]));
+        const { devices } = devicesEmitting(
+            [
+                ['error', new Error('Card is unresponsive')],
+                ['card-inserted', { reader: { name: 'Reader B', state: 0x20, atr: null }, card }],
+            ],
+            [{ name: 'Reader A' }, { name: 'Reader B' }]
+        );
+
+        const result = await withCard(ctx, async () => 0, { devices, timeout: 1000 });
+
+        assert.strictEqual(result, 0);
+        assert.ok(errors.some((e) => e.includes('Card is unresponsive')));
+    });
+
     it('should time out when no card is inserted', async () => {
         const { ctx, errors } = createMockContext();
         const { devices } = devicesEmitting([]);

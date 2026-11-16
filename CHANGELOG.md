@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Application discovery lists every application in a PSE record, and falls back to the PPSE for contactless cards.
 - PC/SC errors (no PC/SC service, a card that can't be connected to) are reported instead of crashing the interactive UI and `emv wait`.
 - The interactive explorer sends GET PROCESSING OPTIONS with the PDOL filled in, reads records from the AFL, and reports a failed application selection.
+- GET PROCESSING OPTIONS encodes PDOL data of 128 bytes or more with a two-byte length (`83 81 xx`); command data too long for a short APDU throws a `RangeError`.
+- The CLI checks arguments before waiting for a card, and an error from a card in another reader no longer stops it waiting for the requested one.
 - Status words are shown as four hex digits (`6700`, not `670`).
 - The unpredictable number (9F37) comes from `crypto.randomBytes`.
 

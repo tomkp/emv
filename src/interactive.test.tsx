@@ -14,6 +14,8 @@ import { PinResultScreen } from './interactive/screens/PinResultScreen.js';
 import { ErrorScreen } from './interactive/screens/ErrorScreen.js';
 import { Header } from './interactive/components/Header.js';
 import { formatSw } from './interactive/format.js';
+import { processingOptions, readApplicationRecords } from './interactive/explore.js';
+import { EmvApplication } from './emv-application.js';
 
 describe('Interactive CLI', () => {
     describe('module exports', () => {
@@ -438,5 +440,70 @@ describe('formatSw', () => {
         assert.strictEqual(formatSw({ sw1: 0x67, sw2: 0x00 }), '6700');
         assert.strictEqual(formatSw({ sw1: 0x6a, sw2: 0x82 }), '6A82');
         assert.strictEqual(formatSw({ sw1: 0x63, sw2: 0xc2 }), '63C2');
+    });
+});
+
+describe('Explorer card reads', () => {
+    const aid = Buffer.from('a0000000031010', 'hex');
+    // FCI: 6F [84 AID, A5 []]
+    const fci = Buffer.from('6f0b8407a0000000031010a500' + '9000', 'hex');
+    // GPO format 1: AIP 1C00, AFL SFI 1 records 11-12
+    const gpo = Buffer.from('80061c00080b0c00' + '9000', 'hex');
+
+    /** A card that answers GPO once per selection, then refuses it with 6985 */
+    function card() {
+        const sent: Buffer[] = [];
+        let gpoDone = false;
+        return {
+            sent,
+            card: {
+                atr: Buffer.from([0x3b, 0x00]),
+                transmit: async (apdu: Buffer | number[]) => {
+                    const buffer = Buffer.from(apdu);
+                    sent.push(buffer);
+                    switch (buffer[1]) {
+                        case 0xa4:
+                            gpoDone = false;
+                            return fci;
+                        case 0xa8:
+                            if (gpoDone) return Buffer.from([0x69, 0x85]);
+                            gpoDone = true;
+                            return gpo;
+                        case 0xb2:
+                            return Buffer.from([0x70, 0x01, buffer[2] ?? 0, 0x90, 0x00]);
+                        default:
+                            return Buffer.from([0x6d, 0x00]);
+                    }
+                },
+            },
+        };
+    }
+
+    it('should read records from the AFL of an earlier GPO without sending GPO again', async () => {
+        const { card: c, sent } = card();
+        const emv = new EmvApplication({ name: 'Reader' }, c);
+        await emv.selectApplication(aid);
+
+        await processingOptions(emv);
+        const records = await readApplicationRecords(emv);
+
+        assert.deepStrictEqual(
+            records.map((r) => r.recordNumber),
+            [11, 12]
+        );
+        assert.strictEqual(sent.filter((a) => a[1] === 0xa8).length, 1);
+    });
+
+    it('should send GPO again after the application is selected again', async () => {
+        const { card: c, sent } = card();
+        const emv = new EmvApplication({ name: 'Reader' }, c);
+        await emv.selectApplication(aid);
+        await processingOptions(emv);
+
+        await emv.selectApplication(aid);
+        const records = await readApplicationRecords(emv);
+
+        assert.strictEqual(records.length, 2);
+        assert.strictEqual(sent.filter((a) => a[1] === 0xa8).length, 2);
     });
 });

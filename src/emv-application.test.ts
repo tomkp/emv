@@ -1600,3 +1600,55 @@ describe('Terminal data', async () => {
         });
     }
 });
+
+describe('Command length limits', () => {
+    function recordingCard(): { card: SmartCard; sent: Buffer[] } {
+        return cardAnswering({ 0xa8: () => hex('9000'), 0xae: () => hex('9000') });
+    }
+
+    it('should encode a GPO data length of 128 bytes or more in two bytes', async () => {
+        const { card, sent } = recordingCard();
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.getProcessingOptions(Buffer.alloc(128, 0x01));
+
+        // Lc = 3 + 128, then 83 81 80
+        assert.strictEqual(sent[0]?.subarray(4, 8).toString('hex'), '83838180');
+        assert.strictEqual(sent[0]?.length, 5 + 131 + 1);
+    });
+
+    it('should reject GPO data that does not fit a short APDU', async () => {
+        const emv = new EmvApplication({ name: 'Reader' }, recordingCard().card);
+
+        await assert.rejects(emv.getProcessingOptions(Buffer.alloc(253)), RangeError);
+    });
+
+    it('should reject Generate AC data that does not fit a short APDU', async () => {
+        const emv = new EmvApplication({ name: 'Reader' }, recordingCard().card);
+
+        await assert.rejects(emv.generateAc(0x80, Buffer.alloc(256)), RangeError);
+    });
+});
+
+describe('Shared unpredictable number', () => {
+    it('should use an unpredictable number given only for the PDOL in the CDOL1 too', async () => {
+        const aid = hex('a0000000031010');
+        const { card, sent } = cardAnswering({
+            0xa4: () => ok(tlv('6f', tlv('84', aid), tlv('a5', tlv('9f38', hex('9f3704'))))),
+            0xa8: () => ok(tlv('80', hex('1c00'), hex('08010100'))),
+            0xb2: () => ok(tlv('70', tlv('8c', hex('9f3704')))),
+            0xae: () => ok(tlv('77', tlv('9f27', hex('80')))),
+        });
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        await emv.performTransaction({
+            amount: 100,
+            currencyCode: 0x0840,
+            pdolValues: new Map([[0x9f37, hex('01020304')]]),
+        });
+
+        assert.strictEqual(commandData(sent, 0xa8)?.toString('hex'), '830401020304');
+        assert.strictEqual(commandData(sent, 0xae)?.toString('hex'), '01020304');
+    });
+});

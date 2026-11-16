@@ -220,6 +220,28 @@ describe('CLI', () => {
                 assert.ok(ctx.outputs.some((o) => o.includes('9f170103')));
             });
 
+            for (const [command, args, message] of [
+                ['verify-pin', ['12ab'], 'Invalid PIN format'],
+                ['select-app', ['a000'], 'Invalid AID format'],
+                ['get-data', ['xyz'], 'Invalid tag format'],
+                ['read-record', ['31', '1'], 'SFI must be'],
+            ] as const) {
+                it(`should reject invalid ${command} arguments without waiting for a card`, async () => {
+                    const ctx = createTestContext();
+                    let started = false;
+                    const { devices } = devicesWithCard(() => Buffer.from([0x90, 0x00]));
+                    devices.start = () => {
+                        started = true;
+                    };
+
+                    const result = await runCommand(command, [...args], ctx, { devices });
+
+                    assert.strictEqual(result, 1);
+                    assert.strictEqual(started, false);
+                    assert.ok(ctx.errors.some((e) => e.includes(message)));
+                });
+            }
+
             it('should report the card status word when a command fails', async () => {
                 const ctx = createTestContext();
                 const { devices } = devicesWithCard(() => Buffer.from([0x6a, 0x82]));
