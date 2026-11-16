@@ -30,7 +30,7 @@ import {
 import { formatSw } from './format.js';
 
 function App(): React.JSX.Element {
-    const { exit } = useApp();
+    const app = useApp();
     const [screen, setScreen] = useState<Screen>('welcome');
     const [readers, setReaders] = useState<ReaderInfo[]>([]);
     const [loading, setLoading] = useState(false);
@@ -55,7 +55,7 @@ function App(): React.JSX.Element {
             if (devices) {
                 devices.stop();
             }
-            exit();
+            app.exit();
         }
     });
 
