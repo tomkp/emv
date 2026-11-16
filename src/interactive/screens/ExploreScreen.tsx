@@ -2,9 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import type { EmvApplication } from '../../emv-application.js';
-import { format as formatTlv, findTagInBuffer, formatGpoResponse } from '../../emv-tags.js';
+import { findTagInBuffer, formatGpoResponse } from '../../emv-tags.js';
 import { Header, Footer, CardBox, StatusBar, LoadingSpinner } from '../components/index.js';
-import { processingOptions, readApplicationRecords } from '../explore.js';
+import { formatRecord, processingOptions, readApplicationRecords } from '../explore.js';
 import { formatSw } from '../format.js';
 import type { AppInfo } from '../types.js';
 
@@ -54,16 +54,12 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
                         const records = (await readApplicationRecords(emv)).map((record) => ({
                             tag: `SFI${String(record.sfi)}:R${String(record.recordNumber)}`,
                             name: 'RECORD',
-                            value:
-                                formatTlv({
-                                    buffer: record.data,
-                                    sw1: 0x90,
-                                    sw2: 0x00,
-                                    isOk: () => true,
-                                }) || record.data.toString('hex'),
+                            value: formatRecord(record.data),
                         }));
                         if (records.length === 0) {
-                            setError('No records found');
+                            setError(
+                                'No records found. Some cards only allow reading records after Get Processing Options.'
+                            );
                         } else {
                             setData(records);
                         }

@@ -9,6 +9,7 @@ import {
     type PdolBuildOptions,
     type RecordData,
 } from '../emv-application.js';
+import { format } from '../emv-tags.js';
 import type { CardResponse } from '../types.js';
 
 /**
@@ -27,7 +28,7 @@ const aflBySelection = new WeakMap<Buffer, AflEntry[]>();
 
 /**
  * Send GET PROCESSING OPTIONS for the selected application, remembering its AFL
- * so records can be read without sending GPO again (cards often refuse a second GPO).
+ * so Read All Records can follow it.
  */
 export async function processingOptions(emv: EmvApplication): Promise<CardResponse> {
     const response = await emv.initiateApplicationProcessing(EXPLORE_TERMINAL_DATA);
@@ -39,18 +40,17 @@ export async function processingOptions(emv: EmvApplication): Promise<CardRespon
 }
 
 /**
- * Read the selected application's records: those listed in its AFL (from an earlier
- * GET PROCESSING OPTIONS, or by sending it now). Without an AFL, scan every SFI from
- * 1 to 30, moving to the next SFI at the first record that can't be read.
+ * Read the selected application's records: those listed in the AFL from an earlier
+ * GET PROCESSING OPTIONS, or, without one, every SFI from 1 to 30, moving to the next
+ * SFI at the first record that can't be read.
+ *
+ * GET PROCESSING OPTIONS is never sent here: it starts a transaction, which advances
+ * the card's transaction counter.
  */
 export async function readApplicationRecords(emv: EmvApplication): Promise<RecordData[]> {
     const fci = emv.getSelectedFci();
-    let afl = fci ? aflBySelection.get(fci) : undefined;
-    if (!afl) {
-        const gpo = await processingOptions(emv);
-        afl = gpo.isOk() ? parseGpoResponseBuffer(gpo.buffer).afl : [];
-    }
-    if (afl.length > 0) {
+    const afl = fci ? aflBySelection.get(fci) : undefined;
+    if (afl && afl.length > 0) {
         return emv.readAllRecords(afl);
     }
 
@@ -63,4 +63,18 @@ export async function readApplicationRecords(emv: EmvApplication): Promise<Recor
         }
     }
     return records;
+}
+
+/**
+ * A record for display: decoded TLV, or hex when it isn't TLV (records in
+ * SFIs 11-30 can be in a proprietary format).
+ */
+export function formatRecord(data: Buffer): string {
+    try {
+        return (
+            format({ buffer: data, sw1: 0x90, sw2: 0x00, isOk: () => true }) || data.toString('hex')
+        );
+    } catch {
+        return data.toString('hex');
+    }
 }

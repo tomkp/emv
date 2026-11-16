@@ -857,6 +857,18 @@ function amountToBcd(amount: number): Buffer {
 }
 
 /**
+ * Find a tag in data that may not be TLV: records in SFIs 11-30 can be in a
+ * proprietary format, which the TLV parser rejects.
+ */
+function findTagIfTlv(buffer: Buffer, tag: number): Buffer | undefined {
+    try {
+        return findTagInBuffer(buffer, tag);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
  * Applications listed in a payment system directory record (PSE) or FCI (PPSE).
  * Each Application Template (tag 61) describes one application.
  */
@@ -907,10 +919,12 @@ export async function discoverApplicationsFrom(card: DirectoryReader): Promise<D
 
     if (card.selectPpse) {
         const ppseResponse = await card.selectPpse();
-        if (ppseResponse.isOk()) {
+        const apps = ppseResponse.isOk() ? appsFromDirectory(ppseResponse.buffer) : [];
+        // Keep a PSE that was read (with its records) unless the PPSE lists applications
+        if (ppseResponse.isOk() && (apps.length > 0 || !pse.success)) {
             return {
                 success: true,
-                apps: appsFromDirectory(ppseResponse.buffer),
+                apps,
                 sfi: 0,
                 pseBuffer: ppseResponse.buffer,
                 source: 'ppse',
@@ -1368,7 +1382,7 @@ export class EmvApplication {
         }
         let cdol1: Buffer | undefined;
         for (const record of records) {
-            cdol1 = findTagInBuffer(record, 0x8c);
+            cdol1 = findTagIfTlv(record, 0x8c);
             if (cdol1) break;
         }
         const cdolData = buildPdolData(

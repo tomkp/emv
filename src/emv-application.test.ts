@@ -1652,3 +1652,47 @@ describe('Shared unpredictable number', () => {
         assert.strictEqual(commandData(sent, 0xae)?.toString('hex'), '01020304');
     });
 });
+
+describe('Review fixes', () => {
+    it('should find the CDOL1 when another record in the AFL is not TLV', async () => {
+        const aid = hex('a0000000031010');
+        const { card, sent } = cardAnswering({
+            0xa4: () => ok(tlv('6f', tlv('84', aid), tlv('a5'))),
+            // AFL: SFI 11 record 1, then SFI 1 record 1
+            0xa8: () => ok(tlv('80', hex('1c00'), hex('5801010008010100'))),
+            // SFI 11 (P2 5C) holds proprietary data; SFI 1 (P2 0C) holds the CDOL1
+            0xb2: (apdu) =>
+                apdu[3] === 0x5c ? ok(hex('ffffff01')) : ok(tlv('70', tlv('8c', hex('9f3704')))),
+            0xae: () => ok(tlv('77', tlv('9f27', hex('80')))),
+        });
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        const result = await emv.performTransaction({ amount: 100, currencyCode: 0x0840 });
+
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(commandData(sent, 0xae)?.length, 4);
+    });
+
+    it('should keep the PSE records when the PPSE lists no applications either', async () => {
+        const pseFci = ok(
+            tlv('6f', tlv('84', Buffer.from('1PAY.SYS.DDF01')), tlv('a5', tlv('88', hex('01'))))
+        );
+        const emptyPpseFci = ok(
+            tlv('6f', tlv('84', Buffer.from('2PAY.SYS.DDF01')), tlv('a5', tlv('bf0c')))
+        );
+        const { card } = cardAnswering({
+            0xa4: (apdu) => (apdu.subarray(5, 6).toString() === '2' ? emptyPpseFci : pseFci),
+            // A directory record with no applications (a DDF entry only)
+            0xb2: (apdu) =>
+                apdu[2] === 1
+                    ? ok(tlv('70', tlv('61', tlv('9d', hex('a000000003')))))
+                    : hex('6a83'),
+        });
+
+        const result = await new EmvApplication({ name: 'Reader' }, card).discoverApplications();
+
+        assert.strictEqual(result.source, 'pse');
+        assert.strictEqual(result.records?.length, 1);
+    });
+});

@@ -14,7 +14,7 @@ import { PinResultScreen } from './interactive/screens/PinResultScreen.js';
 import { ErrorScreen } from './interactive/screens/ErrorScreen.js';
 import { Header } from './interactive/components/Header.js';
 import { formatSw } from './interactive/format.js';
-import { processingOptions, readApplicationRecords } from './interactive/explore.js';
+import { formatRecord, processingOptions, readApplicationRecords } from './interactive/explore.js';
 import { EmvApplication } from './emv-application.js';
 
 describe('Interactive CLI', () => {
@@ -470,7 +470,10 @@ describe('Explorer card reads', () => {
                             gpoDone = true;
                             return gpo;
                         case 0xb2:
-                            return Buffer.from([0x70, 0x01, buffer[2] ?? 0, 0x90, 0x00]);
+                            // Only records 11 and 12 exist
+                            return (buffer[2] ?? 0) >= 11
+                                ? Buffer.from([0x70, 0x01, buffer[2] ?? 0, 0x90, 0x00])
+                                : Buffer.from([0x6a, 0x83]);
                         default:
                             return Buffer.from([0x6d, 0x00]);
                     }
@@ -494,16 +497,31 @@ describe('Explorer card reads', () => {
         assert.strictEqual(sent.filter((a) => a[1] === 0xa8).length, 1);
     });
 
-    it('should send GPO again after the application is selected again', async () => {
+    it('should not send GPO when reading records', async () => {
+        const { card: c, sent } = card();
+        const emv = new EmvApplication({ name: 'Reader' }, c);
+        await emv.selectApplication(aid);
+
+        await readApplicationRecords(emv);
+
+        assert.strictEqual(sent.filter((a) => a[1] === 0xa8).length, 0);
+    });
+
+    it('should not follow the AFL from an earlier selection', async () => {
         const { card: c, sent } = card();
         const emv = new EmvApplication({ name: 'Reader' }, c);
         await emv.selectApplication(aid);
         await processingOptions(emv);
 
         await emv.selectApplication(aid);
-        const records = await readApplicationRecords(emv);
+        await readApplicationRecords(emv);
 
-        assert.strictEqual(records.length, 2);
-        assert.strictEqual(sent.filter((a) => a[1] === 0xa8).length, 2);
+        // Scans from SFI 1, record 1 instead of reading records 11 and 12 from the old AFL
+        const firstRead = sent.find((a) => a[1] === 0xb2);
+        assert.strictEqual(firstRead?.subarray(2, 4).toString('hex'), '010c');
+    });
+
+    it('should show a record that is not TLV as hex', () => {
+        assert.strictEqual(formatRecord(Buffer.from('ffffff01', 'hex')), 'ffffff01');
     });
 });
