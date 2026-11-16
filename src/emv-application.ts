@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto';
 import type { CardResponse, SmartCard, Reader } from './types.js';
-import { findTagInBuffer } from './emv-tags.js';
+import { findAllTagsInBuffer, findTagInBuffer } from './emv-tags.js';
 
 /**
  * AFL (Application File Locator) entry
@@ -27,13 +28,21 @@ export interface TransactionOptions {
     amount: number;
     /** ISO 4217 currency code (e.g., 0x0840 for USD) */
     currencyCode: number;
+    /** ISO 3166-1 terminal country code (default: currencyCode, see PdolBuildOptions.countryCode) */
+    countryCode?: number;
     /** Transaction type (0x00 = purchase, 0x01 = cash, 0x09 = cashback) */
     transactionType?: number;
     /** Cryptogram type to request: 'ARQC' (online), 'TC' (offline approve), 'AAC' (decline) */
     cryptogramType?: 'ARQC' | 'TC' | 'AAC';
-    /** Additional tag values for PDOL */
+    /**
+     * Tag values for the PDOL, overriding the defaults.
+     * An unpredictable number (9F37) given here and not in cdolValues is used for both.
+     */
     pdolValues?: Map<number, Buffer>;
-    /** Additional tag values for CDOL */
+    /**
+     * Tag values for the CDOL1, overriding the defaults.
+     * An unpredictable number (9F37) given here and not in pdolValues is used for both.
+     */
     cdolValues?: Map<number, Buffer>;
 }
 
@@ -79,6 +88,12 @@ export interface PdolBuildOptions {
     amount: number;
     /** ISO 4217 currency code (e.g., 0x0840 for USD) */
     currencyCode: number;
+    /**
+     * ISO 3166-1 terminal country code (e.g., 0x0826 for the UK).
+     * Defaults to currencyCode, which matches for national currencies such as USD or GBP.
+     * Set it for currencies shared by several countries, such as EUR (0x0978).
+     */
+    countryCode?: number;
     /** Transaction type (default 0x00 = purchase) */
     transactionType?: number;
     /** Custom tag value overrides */
@@ -93,6 +108,8 @@ export interface CdolBuildOptions {
     amount: number;
     /** ISO 4217 currency code (e.g., 0x0840 for USD) */
     currencyCode: number;
+    /** ISO 3166-1 terminal country code (default: currencyCode, see PdolBuildOptions.countryCode) */
+    countryCode?: number;
     /** Transaction type (default 0x00 = purchase) */
     transactionType?: number;
     /** Terminal Verification Results (default all zeros) */
@@ -195,10 +212,23 @@ export interface DiscoverAppsResult {
     success: boolean;
     /** List of discovered applications */
     apps: DiscoveredApp[];
-    /** SFI used for reading records */
+    /** SFI used for reading records (0 for PPSE, which has no records) */
     sfi: number;
     /** Raw PSE/PPSE response buffer */
     pseBuffer?: Buffer | undefined;
+    /** Which directory the applications came from */
+    source?: 'pse' | 'ppse' | undefined;
+    /** Directory records read from the PSE */
+    records?: RecordData[] | undefined;
+}
+
+/**
+ * The card operations needed to read the payment system directory
+ */
+export interface DirectoryReader {
+    selectPse(): Promise<CardResponse>;
+    selectPpse?(): Promise<CardResponse>;
+    readRecord(sfi: number, record: number): Promise<CardResponse>;
 }
 
 /**
@@ -303,8 +333,15 @@ function buildGetDataApdu(tag: number): Buffer {
  * Build GET PROCESSING OPTIONS APDU command
  */
 function buildGpoApdu(pdolData: Buffer): Buffer {
-    // Command data is wrapped in tag 83 (Command Template)
-    const commandData = Buffer.from([0x83, pdolData.length, ...pdolData]);
+    // Command data is wrapped in tag 83 (Command Template), with a BER length:
+    // one byte up to 127, then 81 followed by the length
+    if (pdolData.length > 252) {
+        throw new RangeError(
+            `PDOL data must be at most 252 bytes to fit a GET PROCESSING OPTIONS command, got ${String(pdolData.length)}`
+        );
+    }
+    const length = pdolData.length < 0x80 ? [pdolData.length] : [0x81, pdolData.length];
+    const commandData = Buffer.from([0x83, ...length, ...pdolData]);
     return Buffer.from([
         0x80, // CLA: proprietary
         0xa8, // INS: GET PROCESSING OPTIONS
@@ -488,16 +525,80 @@ export function buildPdolData(entries: DolEntry[], tagValues: Map<number, Buffer
 }
 
 /**
- * Generate a random unpredictable number (4 bytes)
+ * Common terminal data needed to build PDOL and CDOL data
  */
-function generateUnpredictableNumber(): Buffer {
-    return Buffer.from([
-        Math.floor(Math.random() * 256),
-        Math.floor(Math.random() * 256),
-        Math.floor(Math.random() * 256),
-        Math.floor(Math.random() * 256),
+interface TerminalDataOptions {
+    amount: number;
+    currencyCode: number;
+    countryCode?: number | undefined;
+    transactionType?: number | undefined;
+    tvr?: Buffer | undefined;
+}
+
+/**
+ * Default terminal values for the tags cards commonly request in their PDOL and CDOL1.
+ * Tags a card requests that are not listed here are sent as zeros by buildPdolData.
+ */
+function defaultTerminalData(options: TerminalDataOptions): Map<number, Buffer> {
+    const {
+        amount,
+        currencyCode,
+        countryCode = currencyCode,
+        transactionType = 0x00,
+        tvr = Buffer.alloc(5),
+    } = options;
+
+    return new Map<number, Buffer>([
+        [0x9f02, amountToBcd(amount)], // Amount, Authorized
+        [0x9f03, Buffer.alloc(6)], // Amount, Other
+        [0x9f1a, uint16(countryCode)], // Terminal Country Code
+        [0x95, tvr], // Terminal Verification Results
+        [0x5f2a, uint16(currencyCode)], // Transaction Currency Code
+        [0x9a, getCurrentDateBcd()], // Transaction Date
+        [0x9c, Buffer.from([transactionType])], // Transaction Type
+        [0x9f37, randomBytes(4)], // Unpredictable Number
+        [0x9f35, Buffer.from([0x22])], // Terminal Type
+        [0x9f45, Buffer.alloc(2)], // Data Authentication Code
+        [0x9f34, Buffer.from([0x00, 0x00, 0x00])], // CVM Results
+        [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])], // TTQ (Terminal Transaction Qualifiers)
     ]);
 }
+
+/**
+ * Copy a map of tag values with overrides applied
+ */
+function withOverrides(
+    values: Map<number, Buffer>,
+    overrides: Map<number, Buffer> | undefined
+): Map<number, Buffer> {
+    const merged = new Map(values);
+    overrides?.forEach((value, tag) => {
+        merged.set(tag, value);
+    });
+    return merged;
+}
+
+/**
+ * Encode a number as 2 bytes, big-endian (e.g., country and currency codes)
+ */
+function uint16(value: number): Buffer {
+    return Buffer.from([(value >> 8) & 0xff, value & 0xff]);
+}
+
+/**
+ * CDOL1 layout used when the card's own CDOL1 (tag 8C) is not known:
+ * amount, other amount, country code, TVR, currency, date, type, unpredictable number (29 bytes).
+ */
+const COMMON_CDOL1: readonly DolEntry[] = [
+    { tag: 0x9f02, length: 6 },
+    { tag: 0x9f03, length: 6 },
+    { tag: 0x9f1a, length: 2 },
+    { tag: 0x95, length: 5 },
+    { tag: 0x5f2a, length: 2 },
+    { tag: 0x9a, length: 3 },
+    { tag: 0x9c, length: 1 },
+    { tag: 0x9f37, length: 4 },
+];
 
 /**
  * Build PDOL data with sensible default values for common EMV tags.
@@ -509,80 +610,36 @@ function generateUnpredictableNumber(): Buffer {
  * @returns Buffer containing PDOL data ready for GPO
  */
 export function buildDefaultPdolData(entries: DolEntry[], options: PdolBuildOptions): Buffer {
-    const {
-        amount,
-        currencyCode,
-        transactionType = 0x00,
-        overrides = new Map<number, Buffer>(),
-    } = options;
-
-    // Build default values for common PDOL tags
-    const defaults = new Map<number, Buffer>([
-        [0x9f02, amountToBcd(amount)], // Amount, Authorized
-        [0x9f03, Buffer.alloc(6)], // Amount, Other
-        [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
-        [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-        [0x9a, getCurrentDateBcd()], // Transaction Date
-        [0x9c, Buffer.from([transactionType])], // Transaction Type
-        [0x9f37, generateUnpredictableNumber()], // Unpredictable Number
-        [0x9f35, Buffer.from([0x22])], // Terminal Type
-        [0x9f45, Buffer.alloc(2)], // Data Authentication Code
-        [0x9f34, Buffer.from([0x00, 0x00, 0x00])], // CVM Results
-        [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])], // TTQ (Terminal Transaction Qualifiers)
-    ]);
-
-    // Merge user overrides
-    overrides.forEach((value, tag) => {
-        defaults.set(tag, value);
-    });
-
-    return buildPdolData(entries, defaults);
+    return buildPdolData(entries, withOverrides(defaultTerminalData(options), options.overrides));
 }
 
 /**
- * Build standard CDOL data for Generate AC command.
- * This constructs the commonly required CDOL1 data in the standard order.
+ * Build CDOL data for the Generate AC command with sensible default values.
  *
+ * Pass the card's CDOL1 (tag 8C, parsed with parsePdol()) as `entries` so the data
+ * matches what the card asks for. Without it, a common 29-byte CDOL1 layout is used,
+ * which many cards will reject.
+ *
+ * @param entries - CDOL entries from parsePdol() (optional)
  * @param options - Transaction options (amount, currency, etc.)
  * @returns Buffer containing CDOL data ready for Generate AC
  */
-export function buildDefaultCdolData(options: CdolBuildOptions): Buffer {
-    const {
-        amount,
-        currencyCode,
-        transactionType = 0x00,
-        tvr = Buffer.alloc(5),
-        overrides = new Map<number, Buffer>(),
-    } = options;
-
-    // Standard CDOL1 fields in typical order
-    const defaults = new Map<number, Buffer>([
-        [0x9f02, amountToBcd(amount)], // Amount, Authorized (6 bytes)
-        [0x9f03, Buffer.alloc(6)], // Amount, Other (6 bytes)
-        [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code (2 bytes)
-        [0x95, tvr], // TVR (5 bytes)
-        [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code (2 bytes)
-        [0x9a, getCurrentDateBcd()], // Transaction Date (3 bytes)
-        [0x9c, Buffer.from([transactionType])], // Transaction Type (1 byte)
-        [0x9f37, generateUnpredictableNumber()], // Unpredictable Number (4 bytes)
-    ]);
-
-    // Merge user overrides
-    overrides.forEach((value, tag) => {
-        defaults.set(tag, value);
-    });
-
-    // Build in standard CDOL1 order
-    return Buffer.concat([
-        defaults.get(0x9f02) ?? Buffer.alloc(6), // Amount
-        defaults.get(0x9f03) ?? Buffer.alloc(6), // Other Amount
-        defaults.get(0x9f1a) ?? Buffer.alloc(2), // Country Code
-        defaults.get(0x95) ?? Buffer.alloc(5), // TVR
-        defaults.get(0x5f2a) ?? Buffer.alloc(2), // Currency
-        defaults.get(0x9a) ?? Buffer.alloc(3), // Date
-        defaults.get(0x9c) ?? Buffer.alloc(1), // Type
-        defaults.get(0x9f37) ?? Buffer.alloc(4), // Unpredictable Number
-    ]);
+export function buildDefaultCdolData(options: CdolBuildOptions): Buffer;
+export function buildDefaultCdolData(entries: DolEntry[], options: CdolBuildOptions): Buffer;
+export function buildDefaultCdolData(
+    entriesOrOptions: DolEntry[] | CdolBuildOptions,
+    maybeOptions?: CdolBuildOptions
+): Buffer {
+    const [entries, options] = Array.isArray(entriesOrOptions)
+        ? [entriesOrOptions, maybeOptions]
+        : [COMMON_CDOL1, entriesOrOptions];
+    if (!options) {
+        throw new TypeError('buildDefaultCdolData requires transaction options');
+    }
+    return buildPdolData(
+        [...entries],
+        withOverrides(defaultTerminalData(options), options.overrides)
+    );
 }
 
 /**
@@ -787,16 +844,96 @@ function byteToCryptogramType(cid: number): 'ARQC' | 'TC' | 'AAC' | undefined {
 
 /**
  * Convert amount to 6-byte BCD format (12 digits)
+ * @throws RangeError if amount is not a whole number of minor units that fits in 12 digits
  */
 function amountToBcd(amount: number): Buffer {
-    const str = amount.toString().padStart(12, '0');
-    const buf = Buffer.alloc(6);
-    for (let i = 0; i < 6; i++) {
-        const d1 = parseInt(str[i * 2] ?? '0', 10);
-        const d2 = parseInt(str[i * 2 + 1] ?? '0', 10);
-        buf[i] = (d1 << 4) | d2;
+    if (!Number.isSafeInteger(amount) || amount < 0 || amount > 999_999_999_999) {
+        throw new RangeError(
+            `Amount must be a whole number of minor units (e.g., cents) from 0 to 999999999999, got ${String(amount)}`
+        );
     }
-    return buf;
+    // The decimal digits, read as hex, are the BCD encoding
+    return Buffer.from(amount.toString().padStart(12, '0'), 'hex');
+}
+
+/**
+ * Find a tag in data that may not be TLV: records in SFIs 11-30 can be in a
+ * proprietary format, which the TLV parser rejects.
+ */
+function findTagIfTlv(buffer: Buffer, tag: number): Buffer | undefined {
+    try {
+        return findTagInBuffer(buffer, tag);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Applications listed in a payment system directory record (PSE) or FCI (PPSE).
+ * Each Application Template (tag 61) describes one application.
+ */
+function appsFromDirectory(buffer: Buffer): DiscoveredApp[] {
+    const templates = findAllTagsInBuffer(buffer, 0x61);
+    const entries = templates.length > 0 ? templates : [buffer];
+    const apps: DiscoveredApp[] = [];
+    for (const entry of entries) {
+        const aid = findTagInBuffer(entry, 0x4f);
+        if (aid) {
+            apps.push({
+                aid: aid.toString('hex'),
+                label: findTagInBuffer(entry, 0x50)?.toString('ascii'),
+                priority: findTagInBuffer(entry, 0x87)?.[0],
+            });
+        }
+    }
+    return apps;
+}
+
+/**
+ * Discover payment applications from the PSE (contact), falling back to the
+ * PPSE (contactless) when the PSE is missing or lists no applications.
+ *
+ * @param card - Card operations used to read the directory
+ */
+export async function discoverApplicationsFrom(card: DirectoryReader): Promise<DiscoverAppsResult> {
+    const pseResponse = await card.selectPse();
+    let pse: DiscoverAppsResult = { success: false, apps: [], sfi: 1, source: 'pse', records: [] };
+
+    if (pseResponse.isOk()) {
+        const sfi = findTagInBuffer(pseResponse.buffer, 0x88)?.[0] ?? 1;
+        const apps: DiscoveredApp[] = [];
+        const records: RecordData[] = [];
+
+        for (let record = 1; record <= 10; record++) {
+            const response = await card.readRecord(sfi, record);
+            if (!response.isOk()) break;
+            records.push({ sfi, recordNumber: record, data: response.buffer });
+            apps.push(...appsFromDirectory(response.buffer));
+        }
+
+        pse = { success: true, apps, sfi, pseBuffer: pseResponse.buffer, source: 'pse', records };
+        if (apps.length > 0) {
+            return pse;
+        }
+    }
+
+    if (card.selectPpse) {
+        const ppseResponse = await card.selectPpse();
+        const apps = ppseResponse.isOk() ? appsFromDirectory(ppseResponse.buffer) : [];
+        // Keep a PSE that was read (with its records) unless the PPSE lists applications
+        if (ppseResponse.isOk() && (apps.length > 0 || !pse.success)) {
+            return {
+                success: true,
+                apps,
+                sfi: 0,
+                pseBuffer: ppseResponse.buffer,
+                source: 'ppse',
+                records: [],
+            };
+        }
+    }
+
+    return pse;
 }
 
 /**
@@ -907,6 +1044,8 @@ function buildChangePinApdu(oldPin: string, newPin: string): Buffer {
 export class EmvApplication {
     readonly #card: SmartCard;
     readonly #reader: Reader;
+    /** FCI returned when the current application was selected */
+    #selectedFci: Buffer | undefined;
 
     constructor(reader: Reader, card: SmartCard) {
         this.#reader = reader;
@@ -925,6 +1064,7 @@ export class EmvApplication {
      * This is typically the first command sent to a contact payment card.
      */
     async selectPse(): Promise<CardResponse> {
+        this.#selectedFci = undefined;
         const apdu = buildSelectApdu(PSE);
         const response = await this.#transmit(apdu);
         return parseResponse(response);
@@ -935,6 +1075,7 @@ export class EmvApplication {
      * This is the first command sent to a contactless payment card.
      */
     async selectPpse(): Promise<CardResponse> {
+        this.#selectedFci = undefined;
         const apdu = buildSelectApdu(PPSE);
         const response = await this.#transmit(apdu);
         return parseResponse(response);
@@ -942,6 +1083,7 @@ export class EmvApplication {
 
     /**
      * Select an EMV application by its AID.
+     * On success, the FCI is kept so later commands can use the application's PDOL.
      * @param aid - Application Identifier (5-16 bytes)
      */
     async selectApplication(aid: Buffer | readonly number[]): Promise<CardResponse> {
@@ -951,9 +1093,43 @@ export class EmvApplication {
             throw new RangeError('AID must be between 5 and 16 bytes');
         }
 
+        this.#selectedFci = undefined;
         const apdu = buildSelectApdu(aidBuffer);
-        const response = await this.#transmit(apdu);
-        return parseResponse(response);
+        const response = parseResponse(await this.#transmit(apdu));
+        if (response.isOk()) {
+            this.#selectedFci = response.buffer;
+        }
+        return response;
+    }
+
+    /**
+     * Get the FCI (File Control Information) returned when the current
+     * application was selected with selectApplication(), if any.
+     */
+    getSelectedFci(): Buffer | undefined {
+        return this.#selectedFci;
+    }
+
+    /**
+     * GET PROCESSING OPTIONS data: the selected application's PDOL (tag 9F38)
+     * filled from `values`, or no data if the application has no PDOL.
+     */
+    #gpoData(values: Map<number, Buffer>): Buffer | undefined {
+        const pdol = this.#selectedFci ? findTagInBuffer(this.#selectedFci, 0x9f38) : undefined;
+        return pdol ? buildPdolData(parsePdol(pdol), values) : undefined;
+    }
+
+    /**
+     * Initiate application processing: GET PROCESSING OPTIONS for the application
+     * selected with selectApplication(), with its PDOL filled from default terminal
+     * data (see buildDefaultPdolData).
+     *
+     * @param options - Transaction options (amount, currency, etc.)
+     * @returns CardResponse containing AIP and AFL on success
+     */
+    async initiateApplicationProcessing(options: PdolBuildOptions): Promise<CardResponse> {
+        const values = withOverrides(defaultTerminalData(options), options.overrides);
+        return this.getProcessingOptions(this.#gpoData(values));
     }
 
     /**
@@ -1004,38 +1180,15 @@ export class EmvApplication {
     }
 
     /**
-     * Discover payment applications on the card via PSE (Payment System Environment).
-     * This reads the PSE directory and extracts information about available applications.
+     * Discover payment applications on the card.
+     * Reads the PSE (Payment System Environment) directory used by contact cards,
+     * and falls back to the PPSE used by contactless cards when the PSE is missing
+     * or lists no applications.
      *
      * @returns Result containing list of discovered applications
      */
     async discoverApplications(): Promise<DiscoverAppsResult> {
-        const pseResponse = await this.selectPse();
-        if (!pseResponse.isOk()) {
-            return { success: false, apps: [], sfi: 1 };
-        }
-
-        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-        const sfi = sfiData?.[0] ?? 1;
-        const apps: DiscoveredApp[] = [];
-
-        for (let record = 1; record <= 10; record++) {
-            const response = await this.readRecord(sfi, record);
-            if (!response.isOk()) break;
-
-            const aid = findTagInBuffer(response.buffer, 0x4f);
-            if (aid) {
-                const label = findTagInBuffer(response.buffer, 0x50);
-                const priority = findTagInBuffer(response.buffer, 0x87);
-                apps.push({
-                    aid: aid.toString('hex'),
-                    label: label?.toString('ascii'),
-                    priority: priority?.[0],
-                });
-            }
-        }
-
-        return { success: true, apps, sfi, pseBuffer: pseResponse.buffer };
+        return discoverApplicationsFrom(this);
     }
 
     /**
@@ -1141,6 +1294,9 @@ export class EmvApplication {
         if (data.length === 0) {
             throw new RangeError('CDOL data must not be empty');
         }
+        if (data.length > 255) {
+            throw new RangeError(`CDOL data must be at most 255 bytes, got ${String(data.length)}`);
+        }
 
         const apdu = buildGenerateAcApdu(cryptogramType, data);
         const response = await this.#transmit(apdu);
@@ -1181,52 +1337,30 @@ export class EmvApplication {
      * Perform a complete EMV transaction flow.
      * This orchestrates: GPO → Read Records → Generate AC
      *
+     * Select the application with selectApplication() first: GPO is sent with the
+     * application's PDOL filled in, and Generate AC with the card's CDOL1 (tag 8C)
+     * read from its records. Terminal values come from `options`, with `pdolValues`
+     * and `cdolValues` overriding them.
+     *
      * @param options - Transaction options including amount and currency
      * @returns TransactionResult with cryptogram and card data
      */
     async performTransaction(options: TransactionOptions): Promise<TransactionResult> {
-        const {
-            amount,
-            currencyCode,
-            transactionType = 0x00,
-            cryptogramType = 'ARQC',
-            pdolValues = new Map<number, Buffer>(),
-            cdolValues = new Map<number, Buffer>(),
-        } = options;
+        const { cryptogramType = 'ARQC', pdolValues, cdolValues } = options;
 
-        // Build default tag values for PDOL
-        const defaultPdolValues = new Map<number, Buffer>([
-            [0x9f02, amountToBcd(amount)], // Amount, Authorized
-            [0x9f03, Buffer.alloc(6)], // Amount, Other
-            [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
-            [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-            [0x9a, getCurrentDateBcd()], // Transaction Date
-            [0x9c, Buffer.from([transactionType])], // Transaction Type
-            [
-                0x9f37,
-                Buffer.from(
-                    [
-                        Math.random() * 256,
-                        Math.random() * 256,
-                        Math.random() * 256,
-                        Math.random() * 256,
-                    ].map(Math.floor)
-                ),
-            ], // Unpredictable Number
-            [0x9f35, Buffer.from([0x22])], // Terminal Type
-            [0x9f45, Buffer.alloc(2)], // Data Authentication Code
-            [0x9f34, Buffer.from([0x00, 0x00, 0x00])], // CVM Results
-            [0x9f66, Buffer.from([0x86, 0x00, 0x00, 0x00])], // TTQ (Terminal Transaction Qualifiers)
-        ]);
-
-        // Merge with user-provided values
-        pdolValues.forEach((value, tag) => {
-            defaultPdolValues.set(tag, value);
-        });
+        // One set of terminal data for the whole transaction, so PDOL and CDOL agree
+        // (e.g., on the unpredictable number)
+        const terminalData = defaultTerminalData(options);
+        // An unpredictable number given for only one of the two commands is used for both
+        const unpredictableNumber = pdolValues?.get(0x9f37) ?? cdolValues?.get(0x9f37);
+        if (unpredictableNumber) {
+            terminalData.set(0x9f37, unpredictableNumber);
+        }
 
         // Step 1: GET PROCESSING OPTIONS
-        // For simplicity, we'll use empty PDOL data if card doesn't require specific data
-        const gpoResponse = await this.getProcessingOptions();
+        const gpoResponse = await this.getProcessingOptions(
+            this.#gpoData(withOverrides(terminalData, pdolValues))
+        );
 
         if (!gpoResponse.isOk()) {
             return {
@@ -1239,57 +1373,22 @@ export class EmvApplication {
         const { aip, afl } = parseGpoResponseBuffer(gpoResponse.buffer);
 
         // Step 2: Read records from AFL
-        const records: Buffer[] = [];
-        for (const entry of afl) {
-            for (let rec = entry.firstRecord; rec <= entry.lastRecord; rec++) {
-                const recordResponse = await this.readRecord(entry.sfi, rec);
-                if (recordResponse.isOk()) {
-                    records.push(recordResponse.buffer);
-                }
-            }
+        const records = (await this.readAllRecords(afl)).map((record) => record.data);
+
+        // Step 3: Build CDOL data from the card's CDOL1 and Generate AC
+        const cdolTerminalData = new Map(terminalData);
+        if (aip) {
+            cdolTerminalData.set(0x82, aip);
         }
-
-        // Step 3: Build CDOL data and Generate AC
-        // Use a minimal CDOL if we don't have the actual CDOL from the card
-        const defaultCdolValues = new Map<number, Buffer>([
-            [0x9f02, amountToBcd(amount)], // Amount, Authorized
-            [0x9f03, Buffer.alloc(6)], // Amount, Other
-            [0x9f1a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Terminal Country Code
-            [0x95, Buffer.alloc(5)], // TVR
-            [0x5f2a, Buffer.from([(currencyCode >> 8) & 0xff, currencyCode & 0xff])], // Transaction Currency Code
-            [0x9a, getCurrentDateBcd()], // Transaction Date
-            [0x9c, Buffer.from([transactionType])], // Transaction Type
-            [
-                0x9f37,
-                Buffer.from(
-                    [
-                        Math.random() * 256,
-                        Math.random() * 256,
-                        Math.random() * 256,
-                        Math.random() * 256,
-                    ].map(Math.floor)
-                ),
-            ], // Unpredictable Number
-            [0x82, aip ?? Buffer.alloc(2)], // AIP
-            [0x9f36, Buffer.alloc(2)], // ATC (placeholder)
-        ]);
-
-        // Merge with user-provided values
-        cdolValues.forEach((value, tag) => {
-            defaultCdolValues.set(tag, value);
-        });
-
-        // Build a minimal CDOL data buffer (common fields)
-        const cdolData = Buffer.concat([
-            defaultCdolValues.get(0x9f02) ?? Buffer.alloc(6), // Amount
-            defaultCdolValues.get(0x9f03) ?? Buffer.alloc(6), // Other Amount
-            defaultCdolValues.get(0x9f1a) ?? Buffer.alloc(2), // Country Code
-            defaultCdolValues.get(0x95) ?? Buffer.alloc(5), // TVR
-            defaultCdolValues.get(0x5f2a) ?? Buffer.alloc(2), // Currency
-            defaultCdolValues.get(0x9a) ?? Buffer.alloc(3), // Date
-            defaultCdolValues.get(0x9c) ?? Buffer.alloc(1), // Type
-            defaultCdolValues.get(0x9f37) ?? Buffer.alloc(4), // Unpredictable Number
-        ]);
+        let cdol1: Buffer | undefined;
+        for (const record of records) {
+            cdol1 = findTagIfTlv(record, 0x8c);
+            if (cdol1) break;
+        }
+        const cdolData = buildPdolData(
+            cdol1 ? parsePdol(cdol1) : [...COMMON_CDOL1],
+            withOverrides(cdolTerminalData, cdolValues)
+        );
 
         const cryptogramByte = cryptogramTypeToByte(cryptogramType);
         const acResponse = await this.generateAc(cryptogramByte, cdolData);

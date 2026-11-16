@@ -2,9 +2,8 @@
  * CLI command implementations
  */
 
-import { findTagInBuffer } from './emv-tags.js';
-import type { CardResponse } from './types.js';
-import type { DiscoveredApp, DiscoverAppsResult } from './emv-application.js';
+import { EmvApplication, discoverApplicationsFrom } from './emv-application.js';
+import type { CardResponse, SmartCard } from './types.js';
 
 const SCARD_STATE_PRESENT = 0x20;
 
@@ -59,15 +58,15 @@ interface DevicesLike {
 /**
  * Minimal EmvApplication interface for dependency injection
  */
-interface EmvLike {
+export interface EmvLike {
     selectPse?(): Promise<CardResponse>;
+    selectPpse?(): Promise<CardResponse>;
     selectApplication?(aid: Buffer | readonly number[]): Promise<CardResponse>;
     readRecord?(sfi: number, record: number): Promise<CardResponse>;
     getData?(tag: number): Promise<CardResponse>;
     verifyPin?(pin: string): Promise<CardResponse>;
     getAtr?(): string;
     getReaderName?(): string;
-    discoverApplications?(): Promise<DiscoverAppsResult>;
 }
 
 /**
@@ -89,11 +88,22 @@ export async function listReaders(
     const devices = options.devices ?? (await createDevices());
 
     try {
+        let pcscError: Error | undefined;
+        devices.on('error', (err) => {
+            pcscError = toError(err);
+        });
         devices.start();
         // Small delay to allow readers to be detected
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         const readers = devices.listReaders();
+
+        // With no PC/SC service there are no readers to list, so report why. Errors about
+        // a card in one of the readers don't stop the readers being listed.
+        if (readers.length === 0 && pcscError) {
+            ctx.error(`PC/SC error: ${pcscError.message}`);
+            return 1;
+        }
 
         if (readers.length === 0) {
             ctx.output('No readers found');
@@ -128,39 +138,114 @@ export async function waitForCard(
     const devices = options.devices ?? (await createDevices());
     const timeout = options.timeout ?? 30000;
 
-    return new Promise((resolve) => {
+    ctx.output('Waiting for card...');
+    if (ctx.readerName) {
+        ctx.output(`Using reader: ${ctx.readerName}`);
+    }
+
+    let event: CardInsertedEvent;
+    try {
+        event = await nextCard(ctx, devices, timeout);
+    } catch (err) {
+        ctx.error(toError(err).message);
+        return 1;
+    } finally {
+        devices.stop();
+    }
+
+    ctx.output(`Card inserted in: ${event.reader.name}`);
+    if (event.card.atr) {
+        ctx.output(`ATR: ${event.card.atr.toString('hex')}`);
+    }
+    return 0;
+}
+
+/**
+ * Connect to a card and run a command against it.
+ *
+ * Waits for a card in the reader given with --reader (or in any reader), runs the
+ * command with an EmvApplication for that card, then stops monitoring.
+ * A card already in a reader counts as inserted when monitoring starts.
+ */
+export async function withCard(
+    ctx: CommandContext,
+    run: (emv: EmvLike) => Promise<number>,
+    options: CommandOptions = {}
+): Promise<number> {
+    if (options.emv) {
+        return run(options.emv);
+    }
+
+    const devices = options.devices ?? (await createDevices());
+    const timeout = options.timeout ?? 30000;
+
+    const hint = setTimeout(() => {
+        ctx.error(
+            ctx.readerName ? `Waiting for a card in ${ctx.readerName}...` : 'Waiting for a card...'
+        );
+    }, 1000);
+
+    let event: CardInsertedEvent;
+    try {
+        event = await nextCard(ctx, devices, timeout);
+    } catch (err) {
+        devices.stop();
+        ctx.error(toError(err).message);
+        return 1;
+    } finally {
+        clearTimeout(hint);
+    }
+
+    try {
+        return await run(new EmvApplication(event.reader, event.card as unknown as SmartCard));
+    } finally {
+        devices.stop();
+    }
+}
+
+/**
+ * Start monitoring and wait for a card in the requested reader.
+ * Rejects on timeout, or on a PC/SC error when there are no readers (no PC/SC service).
+ * Other errors may come from a card in another reader (for example, one that can't
+ * be connected to), so they are reported and the wait goes on. The error listener
+ * stays registered so later PC/SC errors do not crash the process.
+ */
+function nextCard(
+    ctx: CommandContext,
+    devices: DevicesLike,
+    timeout: number
+): Promise<CardInsertedEvent> {
+    return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
-            devices.stop();
-            ctx.error('Timeout waiting for card');
-            resolve(1);
+            reject(new Error('Timeout waiting for card'));
         }, timeout);
 
-        const handleCardInserted = (event: CardInsertedEvent) => {
-            // Filter by reader name if specified
-            if (ctx.readerName && event.reader.name !== ctx.readerName) {
-                return; // Ignore cards in other readers
+        devices.on('card-inserted', (event: unknown) => {
+            const cardEvent = event as CardInsertedEvent;
+            // Ignore cards in other readers
+            if (ctx.readerName && cardEvent.reader.name !== ctx.readerName) {
+                return;
             }
-
             clearTimeout(timeoutId);
-            devices.stop();
+            resolve(cardEvent);
+        });
 
-            ctx.output(`Card inserted in: ${event.reader.name}`);
-            if (event.card.atr) {
-                ctx.output(`ATR: ${event.card.atr.toString('hex')}`);
+        devices.on('error', (err: unknown) => {
+            const message = `Card reader error: ${toError(err).message}`;
+            if (devices.listReaders().length === 0) {
+                clearTimeout(timeoutId);
+                reject(new Error(message));
+            } else {
+                ctx.error(message);
             }
-
-            resolve(0);
-        };
-
-        devices.on('card-inserted', handleCardInserted as (event: unknown) => void);
-
-        ctx.output('Waiting for card...');
-        if (ctx.readerName) {
-            ctx.output(`Using reader: ${ctx.readerName}`);
-        }
+        });
 
         devices.start();
     });
+}
+
+function toError(err: unknown): Error {
+    return err instanceof Error ? err : new Error(String(err));
 }
 
 /**
@@ -169,6 +254,44 @@ export async function waitForCard(
 async function createDevices(): Promise<DevicesLike> {
     const { Devices } = await import('smartcard');
     return new Devices() as DevicesLike;
+}
+
+const INVALID_AID = 'Invalid AID format. AID must be 5-16 bytes in hex (e.g., a0000000041010)';
+const INVALID_TAG = 'Invalid tag format. Tag must be 1-2 bytes in hex (e.g., 9f17)';
+const INVALID_PIN = 'Invalid PIN format. PIN must be 4-12 digits.';
+
+/**
+ * Check an AID argument. Returns an error message, or undefined if it is valid.
+ */
+export function aidError(aidHex: string): string | undefined {
+    return parseHexAid(aidHex) ? undefined : INVALID_AID;
+}
+
+/**
+ * Check SFI and record number arguments. Returns an error message, or undefined if they are valid.
+ */
+export function recordError(sfi: number, record: number): string | undefined {
+    if (!Number.isInteger(sfi) || sfi < 1 || sfi > 30) {
+        return 'SFI must be an integer between 1 and 30';
+    }
+    if (!Number.isInteger(record) || record < 0 || record > 255) {
+        return 'Record number must be an integer between 0 and 255';
+    }
+    return undefined;
+}
+
+/**
+ * Check a tag argument. Returns an error message, or undefined if it is valid.
+ */
+export function tagError(tagStr: string): string | undefined {
+    return parseHexTag(tagStr) === null ? INVALID_TAG : undefined;
+}
+
+/**
+ * Check a PIN argument. Returns an error message, or undefined if it is valid.
+ */
+export function pinError(pin: string): string | undefined {
+    return /^\d{4,12}$/.test(pin) ? undefined : INVALID_PIN;
 }
 
 /**
@@ -241,7 +364,7 @@ export async function selectApp(
 ): Promise<number> {
     const aidBuffer = parseHexAid(aidHex);
     if (!aidBuffer) {
-        ctx.error('Invalid AID format. AID must be 5-16 bytes in hex (e.g., a0000000041010)');
+        ctx.error(INVALID_AID);
         return 1;
     }
 
@@ -292,94 +415,45 @@ export interface PseReadResult {
     sfi: number;
     apps: PseAppInfo[];
     records: PseRecordData[];
+    /** Which directory was read: PSE (contact) or PPSE (contactless) */
+    source?: 'pse' | 'ppse' | undefined;
 }
 
 /**
- * Read applications from Payment System Environment
+ * Read applications from the payment system directory (PSE, or PPSE as a fallback).
  * This is a shared helper used by listApps, cardInfo, and dumpCard.
- * Uses EmvApplication.discoverApplications() for app discovery, with additional
- * record reading for dump functionality.
  */
 export async function readPseApplications(options: CommandOptions = {}): Promise<PseReadResult> {
     const emv = options.emv;
-    if (!emv?.discoverApplications) {
-        // Fallback for mocks without discoverApplications
-        if (!emv?.selectPse || !emv.readRecord) {
-            return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
-        }
-
-        // Use the old implementation for backward compatibility with tests
-        const pseResponse = await emv.selectPse();
-        if (!pseResponse.isOk()) {
-            return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
-        }
-
-        const sfiData = findTagInBuffer(pseResponse.buffer, 0x88);
-        const sfi = sfiData?.[0] ?? 1;
-
-        const apps: PseAppInfo[] = [];
-        const records: PseRecordData[] = [];
-
-        for (let record = 1; record <= 10; record++) {
-            const response = await emv.readRecord(sfi, record);
-            if (!response.isOk()) break;
-
-            records.push({
-                sfi,
-                record,
-                data: response.buffer.toString('hex'),
-            });
-
-            const aid = findTagInBuffer(response.buffer, 0x4f);
-            if (aid) {
-                const label = findTagInBuffer(response.buffer, 0x50);
-                const priority = findTagInBuffer(response.buffer, 0x87);
-
-                apps.push({
-                    aid: aid.toString('hex'),
-                    label: label?.toString('ascii'),
-                    priority: priority?.[0],
-                });
-            }
-        }
-
-        return { pseOk: true, pseBuffer: pseResponse.buffer, sfi, apps, records };
-    }
-
-    // Use the new discoverApplications method
-    const result = await emv.discoverApplications();
-    if (!result.success) {
+    const selectPse = emv?.selectPse?.bind(emv);
+    const readRecord = emv?.readRecord?.bind(emv);
+    if (!selectPse || !readRecord) {
         return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
     }
+    const selectPpse = emv?.selectPpse?.bind(emv);
 
-    // Convert DiscoveredApp to PseAppInfo (they have the same shape)
-    const apps: PseAppInfo[] = result.apps.map((app: DiscoveredApp) => ({
-        aid: app.aid,
-        label: app.label,
-        priority: app.priority,
-    }));
-
-    // For dump functionality, we need to re-read records to get raw data
-    // The discoverApplications method doesn't expose raw records
-    const records: PseRecordData[] = [];
-    if (emv.readRecord) {
-        for (let record = 1; record <= 10; record++) {
-            const response = await emv.readRecord(result.sfi, record);
-            if (!response.isOk()) break;
-            records.push({
-                sfi: result.sfi,
-                record,
-                data: response.buffer.toString('hex'),
-            });
-        }
+    const result = await discoverApplicationsFrom(
+        selectPpse ? { selectPse, selectPpse, readRecord } : { selectPse, readRecord }
+    );
+    if (!result.success) {
+        return { pseOk: false, pseBuffer: Buffer.alloc(0), sfi: 1, apps: [], records: [] };
     }
 
     return {
         pseOk: true,
         pseBuffer: result.pseBuffer ?? Buffer.alloc(0),
         sfi: result.sfi,
-        apps,
-        records,
+        source: result.source,
+        apps: result.apps.map((app) => ({
+            aid: app.aid,
+            label: app.label,
+            priority: app.priority,
+        })),
+        records: (result.records ?? []).map((record) => ({
+            sfi: record.sfi,
+            record: record.recordNumber,
+            data: record.data.toString('hex'),
+        })),
     };
 }
 
@@ -420,15 +494,9 @@ export async function readRecord(
     record: number,
     options: CommandOptions = {}
 ): Promise<number> {
-    // Validate SFI
-    if (!Number.isInteger(sfi) || sfi < 1 || sfi > 30) {
-        ctx.error('SFI must be an integer between 1 and 30');
-        return 1;
-    }
-
-    // Validate record number
-    if (!Number.isInteger(record) || record < 0 || record > 255) {
-        ctx.error('Record number must be an integer between 0 and 255');
+    const argumentError = recordError(sfi, record);
+    if (argumentError) {
+        ctx.error(argumentError);
         return 1;
     }
 
@@ -475,7 +543,7 @@ export async function getData(
 ): Promise<number> {
     const tag = parseHexTag(tagStr);
     if (tag === null) {
-        ctx.error('Invalid tag format. Tag must be 1-2 bytes in hex (e.g., 9f17)');
+        ctx.error(INVALID_TAG);
         return 1;
     }
 
@@ -506,9 +574,9 @@ export async function verifyPin(
     pin: string,
     options: CommandOptions = {}
 ): Promise<number> {
-    // Validate PIN format
-    if (!/^\d{4,12}$/.test(pin)) {
-        ctx.error('Invalid PIN format. PIN must be 4-12 digits.');
+    const argumentError = pinError(pin);
+    if (argumentError) {
+        ctx.error(argumentError);
         return 1;
     }
 
@@ -573,7 +641,7 @@ export async function cardInfo(ctx: CommandContext, options: CommandOptions = {}
         } else if (pseResult.pseOk) {
             ctx.output('No applications found');
         } else {
-            ctx.output('PSE not available');
+            ctx.output('No payment directory found (PSE or PPSE)');
         }
     }
 
@@ -597,6 +665,7 @@ export async function dumpCard(ctx: CommandContext, options: CommandOptions = {}
     if (ctx.format === 'json') {
         const result = {
             atr: emv.getAtr(),
+            directory: pseResult.source,
             pse: pseHex,
             records: pseResult.records,
         };
@@ -610,16 +679,19 @@ export async function dumpCard(ctx: CommandContext, options: CommandOptions = {}
         ctx.output('');
 
         if (pseResult.pseOk) {
-            ctx.output('PSE Response:');
+            ctx.output(`${pseResult.source === 'ppse' ? 'PPSE' : 'PSE'} Response:`);
             ctx.output(`  ${pseHex}`);
             ctx.output('');
 
-            ctx.output(`Reading SFI ${String(pseResult.sfi)}:`);
-            for (const rec of pseResult.records) {
-                ctx.output(`  Record ${String(rec.record)}: ${rec.data}`);
+            // The PPSE lists applications in its response and has no records
+            if (pseResult.source !== 'ppse') {
+                ctx.output(`Reading SFI ${String(pseResult.sfi)}:`);
+                for (const rec of pseResult.records) {
+                    ctx.output(`  Record ${String(rec.record)}: ${rec.data}`);
+                }
             }
         } else {
-            ctx.output('PSE selection failed');
+            ctx.output('PSE and PPSE selection failed');
         }
     }
 

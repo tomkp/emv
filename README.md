@@ -177,6 +177,24 @@ if (acResponse.isOk()) {
 }
 ```
 
+Or run the whole flow (GPO, read records, Generate AC) for the selected application.
+GPO is sent with the application's PDOL filled in, and Generate AC with the card's CDOL1:
+
+```typescript
+await emv.selectApplication(Buffer.from('a0000000031010', 'hex'));
+
+const result = await emv.performTransaction({
+    amount: 1250, // minor units: 12.50
+    currencyCode: 0x0978, // EUR
+    countryCode: 0x0250, // France (defaults to currencyCode, so set it for EUR)
+    cryptogramType: 'ARQC',
+});
+
+if (result.success) {
+    console.log(result.cryptogramType, result.cryptogram?.toString('hex'), result.atc);
+}
+```
+
 #### Card Authentication (DDA)
 
 ```typescript

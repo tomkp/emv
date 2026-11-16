@@ -27,6 +27,7 @@ import {
     type CardInsertedEvent,
     type AppInfo,
 } from './types.js';
+import { formatSw } from './format.js';
 
 function App(): React.JSX.Element {
     const { exit } = useApp();
@@ -66,6 +67,14 @@ function App(): React.JSX.Element {
             try {
                 const { Devices } = await import('smartcard');
                 const d = new Devices() as DevicesLike;
+                // Without a listener, an 'error' event (no PC/SC service, or a card
+                // that can't be connected to) would crash the app
+                d.on('error', (err: unknown) => {
+                    if (!mounted) return;
+                    setError(`PC/SC error: ${err instanceof Error ? err.message : String(err)}`);
+                    setScreen('error');
+                    setLoading(false);
+                });
                 if (mounted) {
                     setDevices(d);
                 }
@@ -183,7 +192,12 @@ function App(): React.JSX.Element {
 
             try {
                 const aidBuffer = Buffer.from(app.aid, 'hex');
-                await emv.selectApplication(aidBuffer);
+                const response = await emv.selectApplication(aidBuffer);
+                if (!response.isOk()) {
+                    setError(`Could not select ${app.label ?? app.aid}: SW=${formatSw(response)}`);
+                    setScreen('error');
+                    return;
+                }
                 setScreen('selected');
             } catch (err) {
                 setError(err instanceof Error ? err.message : String(err));
@@ -219,7 +233,7 @@ function App(): React.JSX.Element {
                 } else {
                     setPinResult({
                         success: false,
-                        message: `Verification failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`,
+                        message: `Verification failed: SW=${formatSw(response)}`,
                     });
                 }
                 setScreen('pin-result');

@@ -2,8 +2,10 @@ import React, { useState, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import type { EmvApplication } from '../../emv-application.js';
-import { format as formatTlv, findTagInBuffer, formatGpoResponse } from '../../emv-tags.js';
+import { findTagInBuffer, formatGpoResponse } from '../../emv-tags.js';
 import { Header, Footer, CardBox, StatusBar, LoadingSpinner } from '../components/index.js';
+import { formatRecord, processingOptions, readApplicationRecords } from '../explore.js';
+import { formatSw } from '../format.js';
 import type { AppInfo } from '../types.js';
 
 interface ExploreScreenProps {
@@ -37,39 +39,27 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
             try {
                 switch (action) {
                     case 'gpo': {
-                        const response = await emv.getProcessingOptions();
+                        const response = await processingOptions(emv);
                         if (response.isOk()) {
                             const formatted = formatGpoResponse(response.buffer);
                             setData([
                                 { tag: 'GPO', name: 'GET_PROCESSING_OPTIONS', value: formatted },
                             ]);
                         } else {
-                            setError(
-                                `GET PROCESSING OPTIONS failed: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
-                            );
+                            setError(`GET PROCESSING OPTIONS failed: SW=${formatSw(response)}`);
                         }
                         break;
                     }
                     case 'records': {
-                        const records: { tag: string; name: string; value: string }[] = [];
-                        for (let sfi = 1; sfi <= 10; sfi++) {
-                            for (let rec = 1; rec <= 10; rec++) {
-                                const response = await emv.readRecord(sfi, rec);
-                                if (response.isOk()) {
-                                    const formatted = formatTlv(response);
-                                    records.push({
-                                        tag: `SFI${String(sfi)}:R${String(rec)}`,
-                                        name: 'RECORD',
-                                        value: formatted || response.buffer.toString('hex'),
-                                    });
-                                } else if (response.sw1 === 0x6a && response.sw2 === 0x83) {
-                                    // Record not found, try next SFI
-                                    break;
-                                }
-                            }
-                        }
+                        const records = (await readApplicationRecords(emv)).map((record) => ({
+                            tag: `SFI${String(record.sfi)}:R${String(record.recordNumber)}`,
+                            name: 'RECORD',
+                            value: formatRecord(record.data),
+                        }));
                         if (records.length === 0) {
-                            setError('No records found');
+                            setError(
+                                'No records found. Some cards only allow reading records after Get Processing Options.'
+                            );
                         } else {
                             setData(records);
                         }
@@ -88,9 +78,7 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
                                 },
                             ]);
                         } else {
-                            setError(
-                                `PIN try count not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
-                            );
+                            setError(`PIN try count not available: SW=${formatSw(response)}`);
                         }
                         break;
                     }
@@ -110,9 +98,7 @@ export function ExploreScreen({ emv, app, onBack }: ExploreScreenProps): React.J
                                 },
                             ]);
                         } else {
-                            setError(
-                                `ATC not available: SW=${response.sw1.toString(16)}${response.sw2.toString(16)}`
-                            );
+                            setError(`ATC not available: SW=${formatSw(response)}`);
                         }
                         break;
                     }
