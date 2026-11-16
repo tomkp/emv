@@ -36,7 +36,7 @@ Use arrow keys to navigate, Enter to select, and `q` to quit.
 
 **Requirements:**
 
-- Node.js 20 or later
+- Node.js 22 or later
 - PC/SC library installed on your system
 
 **Linux:**
