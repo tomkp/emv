@@ -13,6 +13,7 @@ import {
     verifyPin,
     processShellCommand,
     readPseApplications,
+    withCard,
     type CommandContext,
 } from './commands.js';
 
@@ -952,5 +953,229 @@ describe('Commands', () => {
             assert.strictEqual(result.pseOk, false);
             assert.strictEqual(result.apps.length, 0);
         });
+    });
+});
+
+/**
+ * Devices whose start() emits the given events, in order, once handlers are registered
+ */
+function devicesEmitting(events: [string, unknown][], readers: { name: string }[] = []) {
+    const handlers = new Map<string, ((event: unknown) => void)[]>();
+    let stopped = false;
+    return {
+        devices: {
+            listReaders: () => readers.map((r) => ({ name: r.name, state: 0, atr: null })),
+            start: () => {
+                setTimeout(() => {
+                    for (const [name, event] of events) {
+                        handlers.get(name)?.forEach((handler) => {
+                            handler(event);
+                        });
+                    }
+                }, 0);
+            },
+            stop: () => {
+                stopped = true;
+            },
+            on: (name: string, handler: (event: unknown) => void) => {
+                handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+            },
+            once: () => {},
+        },
+        isStopped: () => stopped,
+    };
+}
+
+function cardAnswering(respond: (apdu: Buffer) => Buffer) {
+    return {
+        atr: Buffer.from([0x3b, 0x00]),
+        protocol: 1,
+        connected: true,
+        transmit: async (apdu: Buffer | number[]) => respond(Buffer.from(apdu)),
+    };
+}
+
+function response(hex: string) {
+    const buffer = Buffer.from(hex, 'hex');
+    const sw1 = buffer[buffer.length - 2] ?? 0;
+    const sw2 = buffer[buffer.length - 1] ?? 0;
+    return {
+        buffer: buffer.subarray(0, buffer.length - 2),
+        sw1,
+        sw2,
+        isOk: () => sw1 === 0x90 && sw2 === 0x00,
+    };
+}
+
+describe('withCard', () => {
+    it('should run the command with an EmvApplication for the inserted card', async () => {
+        const { ctx } = createMockContext();
+        const card = cardAnswering(() => Buffer.from([0x90, 0x00]));
+        const { devices, isStopped } = devicesEmitting([
+            ['card-inserted', { reader: { name: 'Reader A', state: 0x20, atr: card.atr }, card }],
+        ]);
+
+        let readerName: string | undefined;
+        const result = await withCard(
+            ctx,
+            async (emv) => {
+                readerName = emv.getReaderName?.();
+                return 7;
+            },
+            { devices, timeout: 1000 }
+        );
+
+        assert.strictEqual(result, 7);
+        assert.strictEqual(readerName, 'Reader A');
+        assert.ok(isStopped());
+    });
+
+    it('should only use a card in the reader given with --reader', async () => {
+        const { ctx } = createMockContext();
+        ctx.readerName = 'Reader B';
+        const card = cardAnswering(() => Buffer.from([0x90, 0x00]));
+        const { devices } = devicesEmitting([
+            ['card-inserted', { reader: { name: 'Reader A', state: 0x20, atr: null }, card }],
+            ['card-inserted', { reader: { name: 'Reader B', state: 0x20, atr: null }, card }],
+        ]);
+
+        let readerName: string | undefined;
+        await withCard(
+            ctx,
+            async (emv) => {
+                readerName = emv.getReaderName?.();
+                return 0;
+            },
+            { devices, timeout: 1000 }
+        );
+
+        assert.strictEqual(readerName, 'Reader B');
+    });
+
+    it('should fail cleanly when PC/SC reports an error', async () => {
+        const { ctx, errors } = createMockContext();
+        const { devices, isStopped } = devicesEmitting([
+            ['error', new Error('SCardEstablishContext failed')],
+        ]);
+
+        let ran = false;
+        const result = await withCard(
+            ctx,
+            async () => {
+                ran = true;
+                return 0;
+            },
+            { devices, timeout: 1000 }
+        );
+
+        assert.strictEqual(result, 1);
+        assert.strictEqual(ran, false);
+        assert.ok(errors.some((e) => e.includes('SCardEstablishContext failed')));
+        assert.ok(isStopped());
+    });
+
+    it('should time out when no card is inserted', async () => {
+        const { ctx, errors } = createMockContext();
+        const { devices } = devicesEmitting([]);
+
+        const result = await withCard(ctx, async () => 0, { devices, timeout: 20 });
+
+        assert.strictEqual(result, 1);
+        assert.ok(errors.some((e) => e.includes('Timeout')));
+    });
+});
+
+describe('PC/SC errors', () => {
+    it('waitForCard should fail cleanly when PC/SC reports an error', async () => {
+        const { ctx, errors } = createMockContext();
+        const { devices } = devicesEmitting([['error', new Error('Card is unresponsive')]]);
+
+        const result = await waitForCard(ctx, { devices, timeout: 1000 });
+
+        assert.strictEqual(result, 1);
+        assert.ok(errors.some((e) => e.includes('Card is unresponsive')));
+    });
+
+    it('listReaders should report the PC/SC error when there are no readers', async () => {
+        const { ctx, errors } = createMockContext();
+        const { devices } = devicesEmitting([['error', new Error('No PC/SC service')]]);
+
+        const result = await listReaders(ctx, { devices });
+
+        assert.strictEqual(result, 1);
+        assert.ok(errors.some((e) => e.includes('No PC/SC service')));
+    });
+
+    it('listReaders should still list readers when a card reports an error', async () => {
+        const { ctx, outputs, errors } = createMockContext();
+        const { devices } = devicesEmitting(
+            [['error', new Error('Card is unresponsive')]],
+            [{ name: 'Reader A' }]
+        );
+
+        const result = await listReaders(ctx, { devices });
+
+        assert.strictEqual(result, 0);
+        assert.deepStrictEqual(errors, []);
+        assert.ok(outputs.some((o) => o.includes('Reader A')));
+    });
+});
+
+describe('Application discovery in commands', () => {
+    const ppseResponse =
+        // 6F [84 '2PAY.SYS.DDF01', A5 [BF0C [61 [4F A0000000041010, 87 01]]]]
+        '6f23840e325041592e5359532e4444463031a511bf0c0e610c4f07a0000000041010870101' + '9000';
+
+    it('should fall back to the PPSE when there is no PSE', async () => {
+        const emv = {
+            selectPse: async () => response('6a82'),
+            selectPpse: async () => response(ppseResponse),
+            readRecord: async () => response('6a83'),
+        };
+
+        const result = await readPseApplications({ emv });
+
+        assert.strictEqual(result.pseOk, true);
+        assert.strictEqual(result.source, 'ppse');
+        assert.deepStrictEqual(
+            result.apps.map((app) => app.aid),
+            ['a0000000041010']
+        );
+    });
+
+    it('should list every application in a PSE record', async () => {
+        const emv = {
+            selectPse: async () => response('6f05a503880101' + '9000'),
+            readRecord: async (_sfi: number, record: number) =>
+                record === 1
+                    ? // 70 [61 [4F A0000000031010], 61 [4F A0000000041010]]
+                      response(
+                          '70166109' + '4f07a0000000031010' + '6109' + '4f07a0000000041010' + '9000'
+                      )
+                    : response('6a83'),
+        };
+
+        const result = await readPseApplications({ emv });
+
+        assert.deepStrictEqual(
+            result.apps.map((app) => app.aid),
+            ['a0000000031010', 'a0000000041010']
+        );
+    });
+
+    it('dump should show the PPSE response without PSE records', async () => {
+        const { ctx, outputs } = createMockContext();
+        const emv = {
+            getAtr: () => '3b00',
+            selectPse: async () => response('6a82'),
+            selectPpse: async () => response(ppseResponse),
+            readRecord: async () => response('6a83'),
+        };
+
+        const result = await dumpCard(ctx, { emv });
+
+        assert.strictEqual(result, 0);
+        assert.ok(outputs.includes('PPSE Response:'));
+        assert.ok(!outputs.some((o) => o.startsWith('Reading SFI')));
     });
 });

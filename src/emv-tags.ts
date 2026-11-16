@@ -1,4 +1,4 @@
-import { parse, type Tlv } from '@tomkp/ber-tlv';
+import { encode, parse, type Tlv } from '@tomkp/ber-tlv';
 import type { CardResponse } from './types.js';
 
 // ANSI color codes for terminal output
@@ -734,6 +734,28 @@ export function findTagInBuffer(buffer: Buffer, tag: number): Buffer | undefined
         }
     }
     return undefined;
+}
+
+/**
+ * Find every occurrence of a tag in a Buffer containing TLV data, in order.
+ * Matches are not searched for nested occurrences of the same tag.
+ * For a constructed tag (e.g., a template), the value is its encoded children.
+ * @param buffer - The buffer to search
+ * @param tag - The tag number to find (e.g., 0x61 for APP_TEMPLATE)
+ * @returns The value of each occurrence
+ */
+export function findAllTagsInBuffer(buffer: Buffer, tag: number): Buffer[] {
+    const results: Buffer[] = [];
+    const visit = (data: Tlv): void => {
+        const tagNum = data.tag.bytes ? tagBytesToNumber(data.tag.bytes) : data.tag.number;
+        if (tagNum === tag) {
+            results.push(Buffer.from(data.children ? encode(data.children) : data.value));
+            return;
+        }
+        data.children?.forEach(visit);
+    };
+    parse(buffer).forEach(visit);
+    return results;
 }
 
 /**

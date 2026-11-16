@@ -151,5 +151,86 @@ describe('CLI', () => {
             assert.strictEqual(result, 1);
             assert.ok(ctx.errors[0]?.includes('Usage:'));
         });
+
+        describe('card commands', () => {
+            /**
+             * Devices that report a card in 'Test Reader' when started, answering
+             * each APDU with `respond`.
+             */
+            function devicesWithCard(respond: (apdu: Buffer) => Buffer) {
+                const handlers = new Map<string, (event: unknown) => void>();
+                const sent: Buffer[] = [];
+                let stopped = false;
+                const card = {
+                    atr: Buffer.from([0x3b, 0x02, 0x14, 0x50]),
+                    protocol: 1,
+                    connected: true,
+                    transmit: async (apdu: Buffer | number[]) => {
+                        const buffer = Buffer.from(apdu);
+                        sent.push(buffer);
+                        return respond(buffer);
+                    },
+                };
+                const devices = {
+                    listReaders: () => [],
+                    start: () => {
+                        setTimeout(() => {
+                            handlers.get('card-inserted')?.({
+                                reader: { name: 'Test Reader', state: 0x20, atr: card.atr },
+                                card,
+                            });
+                        }, 0);
+                    },
+                    stop: () => {
+                        stopped = true;
+                    },
+                    on: (event: string, handler: (event: unknown) => void) => {
+                        handlers.set(event, handler);
+                    },
+                    once: () => {},
+                };
+                return { devices, sent, isStopped: () => stopped };
+            }
+
+            it('should run select-pse against the inserted card', async () => {
+                const ctx = createTestContext();
+                const { devices, sent, isStopped } = devicesWithCard(() =>
+                    Buffer.from([0x6f, 0x00, 0x90, 0x00])
+                );
+
+                const result = await runCommand('select-pse', [], ctx, { devices });
+
+                assert.strictEqual(result, 0);
+                assert.deepStrictEqual(ctx.errors, []);
+                assert.ok(ctx.outputs.includes('PSE selected successfully'));
+                assert.strictEqual(sent[0]?.subarray(0, 2).toString('hex'), '00a4');
+                assert.ok(isStopped());
+            });
+
+            it('should run get-data against the inserted card', async () => {
+                const ctx = createTestContext();
+                const { devices, sent } = devicesWithCard(() =>
+                    Buffer.from([0x9f, 0x17, 0x01, 0x03, 0x90, 0x00])
+                );
+
+                const result = await runCommand('get-data', ['9f17'], ctx, { devices });
+
+                assert.strictEqual(result, 0);
+                assert.strictEqual(sent[0]?.toString('hex'), '80ca9f1700');
+                assert.ok(ctx.outputs.some((o) => o.includes('9f170103')));
+            });
+
+            it('should report the card status word when a command fails', async () => {
+                const ctx = createTestContext();
+                const { devices } = devicesWithCard(() => Buffer.from([0x6a, 0x82]));
+
+                const result = await runCommand('select-app', ['a0000000041010'], ctx, {
+                    devices,
+                });
+
+                assert.strictEqual(result, 1);
+                assert.ok(ctx.errors.some((e) => e.includes('6A82')));
+            });
+        });
     });
 });

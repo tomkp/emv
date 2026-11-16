@@ -8,6 +8,7 @@ import {
     getTagName,
     formatGpoResponse,
 } from './index.js';
+import { findAllTagsInBuffer } from './emv-tags.js';
 import type { CardResponse } from './types.js';
 
 function createMockResponse(buffer: Buffer): CardResponse {
@@ -314,5 +315,28 @@ describe('formatGpoResponse', () => {
         const buffer = Buffer.from('80', 'hex');
         const result = formatGpoResponse(buffer);
         assert.strictEqual(result, '80');
+    });
+});
+
+describe('findAllTagsInBuffer', () => {
+    it('should return every occurrence of a tag, in order', () => {
+        // 70 [61 [4F A0000000031010], 61 [4F A0000000041010]]
+        const buffer = Buffer.from('701661094f07a000000003101061094f07a0000000041010', 'hex');
+
+        const templates = findAllTagsInBuffer(buffer, 0x61);
+
+        // A template's value is its encoded children
+        assert.deepStrictEqual(
+            templates.map((t) => t.toString('hex')),
+            ['4f07a0000000031010', '4f07a0000000041010']
+        );
+        assert.deepStrictEqual(
+            findAllTagsInBuffer(buffer, 0x4f).map((t) => t.toString('hex')),
+            ['a0000000031010', 'a0000000041010']
+        );
+    });
+
+    it('should return an empty array when the tag is absent', () => {
+        assert.deepStrictEqual(findAllTagsInBuffer(Buffer.from('5a0112', 'hex'), 0x61), []);
     });
 });

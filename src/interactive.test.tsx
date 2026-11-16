@@ -13,6 +13,7 @@ import { SelectedAppScreen } from './interactive/screens/SelectedAppScreen.js';
 import { PinResultScreen } from './interactive/screens/PinResultScreen.js';
 import { ErrorScreen } from './interactive/screens/ErrorScreen.js';
 import { Header } from './interactive/components/Header.js';
+import { formatSw } from './interactive/format.js';
 
 describe('Interactive CLI', () => {
     describe('module exports', () => {
@@ -429,5 +430,13 @@ describe('Interactive CLI', () => {
                 );
             }
         });
+    });
+});
+
+describe('formatSw', () => {
+    it('should show the status word as four hex digits', () => {
+        assert.strictEqual(formatSw({ sw1: 0x67, sw2: 0x00 }), '6700');
+        assert.strictEqual(formatSw({ sw1: 0x6a, sw2: 0x82 }), '6A82');
+        assert.strictEqual(formatSw({ sw1: 0x63, sw2: 0xc2 }), '63C2');
     });
 });

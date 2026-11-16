@@ -16,7 +16,9 @@ import {
     cardInfo,
     dumpCard,
     processShellCommand,
+    withCard,
     type CommandContext,
+    type CommandOptions,
 } from './commands.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -137,30 +139,33 @@ function createContext(options: ParsedOptions): CommandContext {
 }
 
 /**
- * Run a command and handle errors
+ * Run a command and handle errors.
+ * Card commands wait for a card (see withCard) and run against it.
+ * @param options - Devices or EMV application to use instead of the real ones (for tests)
  */
 export async function runCommand(
     command: string,
     args: string[],
-    ctx: CommandContext
+    ctx: CommandContext,
+    options: CommandOptions = {}
 ): Promise<number> {
     switch (command) {
         case 'readers':
-            return listReaders(ctx);
+            return listReaders(ctx, options);
         case 'wait':
-            return waitForCard(ctx);
+            return waitForCard(ctx, options);
         case 'select-pse':
-            return selectPse(ctx);
+            return withCard(ctx, (emv) => selectPse(ctx, { emv }), options);
         case 'select-app': {
             const aid = args[0];
             if (!aid) {
                 ctx.error('Usage: emv select-app <aid>');
                 return 1;
             }
-            return selectApp(ctx, aid);
+            return withCard(ctx, (emv) => selectApp(ctx, aid, { emv }), options);
         }
         case 'list-apps':
-            return listApps(ctx);
+            return withCard(ctx, (emv) => listApps(ctx, { emv }), options);
         case 'read-record': {
             const sfiArg = args[0];
             const recordArg = args[1];
@@ -174,7 +179,7 @@ export async function runCommand(
                 ctx.error('SFI and record must be numbers');
                 return 1;
             }
-            return readRecord(ctx, sfi, record);
+            return withCard(ctx, (emv) => readRecord(ctx, sfi, record, { emv }), options);
         }
         case 'get-data': {
             const tagArg = args[0];
@@ -182,7 +187,7 @@ export async function runCommand(
                 ctx.error('Usage: emv get-data <tag>');
                 return 1;
             }
-            return getData(ctx, tagArg);
+            return withCard(ctx, (emv) => getData(ctx, tagArg, { emv }), options);
         }
         case 'verify-pin': {
             const pin = args[0];
@@ -190,14 +195,14 @@ export async function runCommand(
                 ctx.error('Usage: emv verify-pin <pin>');
                 return 1;
             }
-            return verifyPin(ctx, pin);
+            return withCard(ctx, (emv) => verifyPin(ctx, pin, { emv }), options);
         }
         case 'info':
-            return cardInfo(ctx);
+            return withCard(ctx, (emv) => cardInfo(ctx, { emv }), options);
         case 'dump':
-            return dumpCard(ctx);
+            return withCard(ctx, (emv) => dumpCard(ctx, { emv }), options);
         case 'shell':
-            return runShell(ctx);
+            return withCard(ctx, (emv) => runShell(ctx, { emv }), options);
         default:
             ctx.error(`Command '${command}' not yet implemented`);
             return 1;
@@ -205,9 +210,9 @@ export async function runCommand(
 }
 
 /**
- * Run interactive shell mode
+ * Run interactive shell mode against a connected card
  */
-async function runShell(ctx: CommandContext): Promise<number> {
+async function runShell(ctx: CommandContext, options: CommandOptions): Promise<number> {
     ctx.output('EMV Interactive Shell');
     ctx.output('Type "help" for available commands, "quit" to exit');
     ctx.output('');
@@ -222,7 +227,7 @@ async function runShell(ctx: CommandContext): Promise<number> {
             rl.question('emv> ', (input) => {
                 void (async () => {
                     try {
-                        const result = await processShellCommand(ctx, input);
+                        const result = await processShellCommand(ctx, input, options);
                         if (result.action === 'exit') {
                             rl.close();
                             resolve(0);

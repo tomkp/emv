@@ -1337,3 +1337,266 @@ describe('EmvApplication', () => {
         });
     });
 });
+
+/** Encode a TLV with a short-form length */
+function tlv(tag: string, ...values: Buffer[]): Buffer {
+    const value = Buffer.concat(values);
+    return Buffer.concat([Buffer.from(tag, 'hex'), Buffer.from([value.length]), value]);
+}
+
+const hex = (value: string): Buffer => Buffer.from(value, 'hex');
+const ok = (data: Buffer): Buffer => Buffer.concat([data, hex('9000')]);
+
+/** A card answering each APDU by instruction byte; unlisted instructions get 6D00 */
+function cardAnswering(answers: Record<number, (apdu: Buffer) => Buffer>): {
+    card: SmartCard;
+    sent: Buffer[];
+} {
+    const sent: Buffer[] = [];
+    return {
+        sent,
+        card: {
+            atr: hex('3b00'),
+            transmit: async (apdu) => {
+                const buffer = Buffer.from(apdu);
+                sent.push(buffer);
+                return answers[buffer[1] ?? 0]?.(buffer) ?? hex('6d00');
+            },
+        },
+    };
+}
+
+/** Data field of the first APDU sent with the given instruction byte */
+function commandData(sent: Buffer[], ins: number): Buffer | undefined {
+    const apdu = sent.find((a) => a[1] === ins);
+    return apdu?.subarray(5, 5 + (apdu[4] ?? 0));
+}
+
+describe('Transactions using the card data object lists', () => {
+    const aid = hex('a0000000031010');
+    const generateAcResponse = ok(
+        tlv(
+            '77',
+            tlv('9f27', hex('80')),
+            tlv('9f36', hex('0001')),
+            tlv('9f26', Buffer.alloc(8, 0xab))
+        )
+    );
+    // AIP 1C00, AFL: SFI 1, record 1
+    const gpoResponse = ok(tlv('80', hex('1c00'), hex('08010100')));
+
+    function cardWith(pdol: string | undefined, cdol1: string | undefined) {
+        const fci = tlv('6f', tlv('84', aid), tlv('a5', ...(pdol ? [tlv('9f38', hex(pdol))] : [])));
+        const record = tlv(
+            '70',
+            tlv('5a', hex('4761739001010010')),
+            ...(cdol1 ? [tlv('8c', hex(cdol1))] : [])
+        );
+        return cardAnswering({
+            0xa4: () => ok(fci),
+            0xa8: () => gpoResponse,
+            0xb2: () => ok(record),
+            0xae: () => generateAcResponse,
+        });
+    }
+
+    it('should send GPO with the PDOL of the selected application filled in', async () => {
+        // PDOL: TTQ(4) amount(6) UN(4) currency(2) country(2)
+        const { card, sent } = cardWith('9f66049f02069f37045f2a029f1a02', undefined);
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        const result = await emv.performTransaction({
+            amount: 1234,
+            currencyCode: 0x0978,
+            countryCode: 0x0250,
+            pdolValues: new Map([[0x9f66, hex('36000000')]]),
+        });
+
+        assert.strictEqual(result.success, true);
+        const gpoApdu = sent.find((a) => a[1] === 0xa8);
+        assert.strictEqual(gpoApdu?.subarray(5, 7).toString('hex'), '8312');
+        const pdolData = gpoApdu?.subarray(7, 7 + 0x12);
+        assert.strictEqual(pdolData?.subarray(0, 4).toString('hex'), '36000000');
+        assert.strictEqual(pdolData?.subarray(4, 10).toString('hex'), '000000001234');
+        assert.strictEqual(pdolData?.subarray(14, 16).toString('hex'), '0978');
+        assert.strictEqual(pdolData?.subarray(16, 18).toString('hex'), '0250');
+    });
+
+    it("should send Generate AC with the card's CDOL1 filled in", async () => {
+        // PDOL: UN(4); CDOL1: amount(6) country(2) UN(4) ICC dynamic number(8)
+        const { card, sent } = cardWith('9f3704', '9f02069f1a029f37049f4c08');
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        const result = await emv.performTransaction({
+            amount: 500,
+            currencyCode: 0x0826,
+            cdolValues: new Map([[0x9f4c, Buffer.alloc(8, 0x11)]]),
+        });
+
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.cryptogramType, 'ARQC');
+        const cdolData = commandData(sent, 0xae);
+        assert.strictEqual(cdolData?.length, 20);
+        assert.strictEqual(cdolData?.subarray(0, 6).toString('hex'), '000000000500');
+        assert.strictEqual(cdolData?.subarray(6, 8).toString('hex'), '0826');
+        assert.strictEqual(cdolData?.subarray(12, 20).toString('hex'), '1111111111111111');
+        // The same unpredictable number goes in the PDOL and the CDOL1
+        const pdolData = sent.find((a) => a[1] === 0xa8)?.subarray(7, 11);
+        assert.strictEqual(cdolData?.subarray(8, 12).toString('hex'), pdolData?.toString('hex'));
+    });
+
+    it('should use the common 29-byte CDOL1 layout when the card has no CDOL1', async () => {
+        const { card, sent } = cardWith(undefined, undefined);
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        await emv.performTransaction({ amount: 100, currencyCode: 0x0840 });
+
+        assert.strictEqual(commandData(sent, 0xa8)?.toString('hex'), '8300');
+        assert.strictEqual(commandData(sent, 0xae)?.length, 29);
+    });
+
+    it('should initiate application processing with the PDOL filled in', async () => {
+        const { card, sent } = cardWith('9f0206', undefined);
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+        const response = await emv.initiateApplicationProcessing({
+            amount: 0,
+            currencyCode: 0x0840,
+        });
+
+        assert.ok(response.isOk());
+        assert.strictEqual(commandData(sent, 0xa8)?.toString('hex'), '8306000000000000');
+    });
+
+    it('should forget the FCI when a selection fails', async () => {
+        const { card } = cardAnswering({ 0xa4: () => hex('6a82') });
+        const emv = new EmvApplication({ name: 'Reader' }, card);
+
+        await emv.selectApplication(aid);
+
+        assert.strictEqual(emv.getSelectedFci(), undefined);
+    });
+});
+
+describe('Application discovery', () => {
+    const app = (aid: string, label: string, priority: number): Buffer =>
+        tlv(
+            '61',
+            tlv('4f', hex(aid)),
+            tlv('50', Buffer.from(label)),
+            tlv('87', Buffer.from([priority]))
+        );
+    const pseFci = ok(
+        tlv('6f', tlv('84', Buffer.from('1PAY.SYS.DDF01')), tlv('a5', tlv('88', hex('01'))))
+    );
+    const ppseFci = ok(
+        tlv(
+            '6f',
+            tlv('84', Buffer.from('2PAY.SYS.DDF01')),
+            tlv('a5', tlv('bf0c', app('a0000000031010', 'VISA', 1), app('a0000000041010', 'MC', 2)))
+        )
+    );
+    const isPpse = (apdu: Buffer): boolean => apdu.subarray(5, 6).toString() === '2';
+
+    it('should list every application in a PSE record', async () => {
+        const { card } = cardAnswering({
+            0xa4: () => pseFci,
+            0xb2: (apdu) =>
+                apdu[2] === 1
+                    ? ok(
+                          tlv(
+                              '70',
+                              app('a0000000031010', 'VISA DEBIT', 1),
+                              app('a0000000041010', 'MASTERCARD', 2)
+                          )
+                      )
+                    : hex('6a83'),
+        });
+
+        const result = await new EmvApplication({ name: 'Reader' }, card).discoverApplications();
+
+        assert.strictEqual(result.source, 'pse');
+        assert.deepStrictEqual(result.apps, [
+            { aid: 'a0000000031010', label: 'VISA DEBIT', priority: 1 },
+            { aid: 'a0000000041010', label: 'MASTERCARD', priority: 2 },
+        ]);
+        assert.strictEqual(result.records?.length, 1);
+    });
+
+    it('should fall back to the PPSE when the card has no PSE', async () => {
+        const { card } = cardAnswering({
+            0xa4: (apdu) => (isPpse(apdu) ? ppseFci : hex('6a82')),
+        });
+
+        const result = await new EmvApplication({ name: 'Reader' }, card).discoverApplications();
+
+        assert.strictEqual(result.success, true);
+        assert.strictEqual(result.source, 'ppse');
+        assert.deepStrictEqual(
+            result.apps.map((a) => a.aid),
+            ['a0000000031010', 'a0000000041010']
+        );
+    });
+
+    it('should fall back to the PPSE when the PSE lists no applications', async () => {
+        const { card } = cardAnswering({
+            0xa4: (apdu) => (isPpse(apdu) ? ppseFci : pseFci),
+            0xb2: () => hex('6a83'),
+        });
+
+        const result = await new EmvApplication({ name: 'Reader' }, card).discoverApplications();
+
+        assert.strictEqual(result.source, 'ppse');
+        assert.strictEqual(result.apps.length, 2);
+    });
+});
+
+describe('Terminal data', async () => {
+    const { buildDefaultCdolData, buildDefaultPdolData, parsePdol } =
+        await import('./emv-application.js');
+
+    it("should build CDOL data in the order of the card's CDOL1", () => {
+        const result = buildDefaultCdolData(parsePdol(hex('9f1a029f0206')), {
+            amount: 2500,
+            currencyCode: 0x0978,
+            countryCode: 0x0276,
+        });
+
+        assert.strictEqual(result.toString('hex'), '0276000000002500');
+    });
+
+    it('should use the country code for 9F1A and the currency code for 5F2A', () => {
+        const result = buildDefaultPdolData(parsePdol(hex('9f1a025f2a02')), {
+            amount: 0,
+            currencyCode: 0x0978,
+            countryCode: 0x0250,
+        });
+
+        assert.strictEqual(result.toString('hex'), '02500978');
+    });
+
+    it('should default the country code to the currency code', () => {
+        const result = buildDefaultPdolData(parsePdol(hex('9f1a02')), {
+            amount: 0,
+            currencyCode: 0x0826,
+        });
+
+        assert.strictEqual(result.toString('hex'), '0826');
+    });
+
+    it('should encode the largest amount that fits in 12 digits', () => {
+        const result = buildDefaultCdolData({ amount: 999_999_999_999, currencyCode: 0x0840 });
+
+        assert.strictEqual(result.subarray(0, 6).toString('hex'), '999999999999');
+    });
+
+    for (const amount of [12.34, -1, 1_000_000_000_000, Number.NaN]) {
+        it(`should reject an amount of ${String(amount)}`, () => {
+            assert.throws(() => buildDefaultCdolData({ amount, currencyCode: 0x0840 }), RangeError);
+        });
+    }
+});
