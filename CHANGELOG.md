@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated `smartcard` to 3.8.0: typed PC/SC errors, card resets that work on readers such as the SCR35xx, and more reliable reader monitoring.
 - **Requires Node.js 22 or later.** The interactive UI now uses ink 7, which needs Node.js 22. Node.js 20 reached end of life in April 2026.
 - Amounts must be whole numbers of minor units from 0 to 999999999999; others throw a `RangeError` instead of being encoded incorrectly.
 
