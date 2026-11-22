@@ -57,7 +57,7 @@
     "homepage": "https://github.com/tomkp/emv",
     "dependencies": {
         "@tomkp/ber-tlv": "^1.0.1",
-        "ink": "^7.0.0",
+        "ink": "^8.0.0",
         "ink-gradient": "^4.0.0",
         "ink-select-input": "^6.2.0",
         "ink-spinner": "^5.0.0",
@@ -67,13 +67,13 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
-        "@types/node": "^25.0.6",
+        "@types/node": "^26.6.6",
         "@types/react": "^19.2.8",
         "eslint": "^10.2.0",
         "globals": "^17.0.0",
         "ink-testing-library": "^4.0.0",
         "prettier": "^3.4.2",
-        "typescript": "^6.0.2",
+        "typescript": "^7.0.2",
         "typescript-eslint": "^8.52.0"
     }
 }
